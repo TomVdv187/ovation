@@ -48,6 +48,33 @@ The seed carries **200 guests against a capacity of 250**, so `--count 250`
 runs 200 distinct check-ins and says so; `--replay` then puts the same volume
 through the pipeline again as duplicates.
 
+### Measured
+
+Production build (`next build && next start`), local PostgreSQL 18, one Node
+process, no realtime broker. Client figures are the full HTTP round trip from
+the harness; server figures are the handler's own histogram — the gap between
+them is network and framework.
+
+| | paced (200 over 10 min) | burst (200 across 8 lanes) |
+|---|---|---|
+| wall clock | 601.8 s | **2.6 s** (~77 scans/s) |
+| client p50 / **p95** / p99 | 20 / **47** / 68 ms | 23 / **119** / 164 ms |
+| client max | 120 ms | 456 ms |
+| server p50 / p95 / max | 4.8 / 16.8 / 100.8 ms | 4.3 / 63.4 / 410.6 ms |
+| dropped realtime updates | **0** | **0** |
+| sequence gaps | **0** | **0** |
+| announcement to a subscribed client | 22 ms | 12 ms |
+| replay of all 200, same keys | 200 → 200, no duplicates | 200 → 200, no duplicates |
+
+**P95 is 47 ms paced and 119 ms under burst, against a 2.5 s budget** — roughly
+50× and 20× of headroom. The 400 samples per run are 200 check-ins plus 200
+replays; every replay returned `ALREADY_CHECKED_IN`.
+
+Caveat worth stating: this is a single machine talking to itself. The budget
+exists for a venue tablet on bad wifi, and the client column is the half that
+will move there. What these numbers do establish is that none of the budget is
+being spent on our side of the wire.
+
 ## How it fits together
 
 ### The check-in path
