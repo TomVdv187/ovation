@@ -1,0 +1,8 @@
+{
+  "name": "@ovation/www",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "typecheck": "echo \"(placeholder — Agent 6, optional)\" && exit 0"
+  }
+}

@@ -1,0 +1,24 @@
+@import "@ovation/core/design/tokens.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    background: var(--ov-bg);
+  }
+  body {
+    background: var(--ov-bg);
+    color: var(--ov-ink);
+    font-family: var(--ov-font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--ov-font-display);
+    font-weight: 400;
+    letter-spacing: -0.01em;
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "@ovation/revenue",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "echo \"(no tests yet — Agent 4 TREASURY)\" && exit 0",
+    "clean": "rimraf .turbo *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "@ovation/core": "workspace:*",
+    "@trpc/server": "^11.0.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.7.2"
+  }
+}

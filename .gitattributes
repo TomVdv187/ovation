@@ -1,0 +1,7 @@
+* text=auto eol=lf
+
+# Append-only logs — keep both sides of a conflict instead of picking one.
+CONTRACT_CHANGES.md merge=union
+
+# Lockfile: let pnpm regenerate rather than hand-merge.
+pnpm-lock.yaml -diff linguist-generated=true

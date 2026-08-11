@@ -1,0 +1,17 @@
+@import "@ovation/core/design/tokens.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background: var(--ov-bg);
+    color: var(--ov-ink);
+    font-family: var(--ov-font-sans);
+    /* Door staff hold a phone in one hand — no accidental text selection. */
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+}

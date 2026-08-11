@@ -1,0 +1,41 @@
+.claude/settings.local.json
+
+# deps
+node_modules/
+.pnpm-store/
+
+# build
+.next/
+out/
+dist/
+build/
+.turbo/
+*.tsbuildinfo
+
+# env
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# prisma
+packages/core/prisma/*.db
+packages/core/prisma/migrations/dev.db*
+
+# test / tooling
+coverage/
+playwright-report/
+test-results/
+blob-report/
+.playwright/
+
+# os / editor
+.DS_Store
+Thumbs.db
+NUL
+*.log
+npm-debug.log*
+pnpm-debug.log*
+.vscode/*
+!.vscode/extensions.json
+.idea/

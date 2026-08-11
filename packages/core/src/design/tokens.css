@@ -1,0 +1,100 @@
+/*
+ * OVATION design tokens — the console chrome.
+ *
+ * Dark, quiet, gold. Every surface in apps/console reads from these variables;
+ * no component hardcodes a hex. Public event pages are themed per-event from
+ * Event.theme instead — see themePresets in ./tokens.ts.
+ */
+
+:root {
+  /* ── ground ─────────────────────────────────────────────── */
+  --ov-bg: #0d0d0d;
+  --ov-surface: #1a1a19;
+  --ov-surface-raised: #232321;
+  --ov-surface-sunken: #131312;
+  --ov-line: #2e2e2b;
+  --ov-line-strong: #3d3d39;
+
+  /* ── ink ────────────────────────────────────────────────── */
+  --ov-ink: #f5f3ee;
+  --ov-ink-muted: #a8a49a;
+  --ov-ink-subtle: #6e6a62;
+  --ov-ink-inverse: #0d0d0d;
+
+  /* ── accent ─────────────────────────────────────────────── */
+  --ov-gold: #d9b36c;
+  --ov-gold-bright: #e8c47e;
+  --ov-gold-dim: #8c7343;
+  --ov-gold-wash: rgba(217, 179, 108, 0.12);
+
+  /* ── data ───────────────────────────────────────────────── */
+  --ov-chart-1: #3987e5;
+  --ov-chart-2: #d95926;
+  --ov-chart-3: #199e70;
+  --ov-chart-4: #d9b36c;
+  --ov-chart-5: #8b6ed9;
+
+  /* ── status ─────────────────────────────────────────────── */
+  --ov-good: #0ca30c;
+  --ov-warning: #fab219;
+  --ov-serious: #ec835a;
+  --ov-critical: #d03b3b;
+  --ov-good-wash: rgba(12, 163, 12, 0.14);
+  --ov-warning-wash: rgba(250, 178, 25, 0.14);
+  --ov-serious-wash: rgba(236, 131, 90, 0.14);
+  --ov-critical-wash: rgba(208, 59, 59, 0.14);
+
+  /* ── type ───────────────────────────────────────────────── */
+  --ov-font-display: "Didot", "Playfair Display", "Bodoni MT", "Times New Roman",
+    ui-serif, Georgia, serif;
+  --ov-font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --ov-font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono",
+    Menlo, monospace;
+
+  /* ── metrics ────────────────────────────────────────────── */
+  --ov-rail: 64px;
+  --ov-chat: 360px;
+  --ov-radius-sm: 4px;
+  --ov-radius: 8px;
+  --ov-radius-lg: 14px;
+
+  --ov-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.28);
+  --ov-shadow-pop: 0 12px 40px rgba(0, 0, 0, 0.5);
+
+  --ov-ease: cubic-bezier(0.2, 0, 0.1, 1);
+  --ov-dur-fast: 120ms;
+  --ov-dur: 200ms;
+
+  color-scheme: dark;
+}
+
+/* Console baseline. Apps import this file once, in their root layout. */
+body.ov-console {
+  background: var(--ov-bg);
+  color: var(--ov-ink);
+  font-family: var(--ov-font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.ov-display {
+  font-family: var(--ov-font-display);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+/* Keyboard focus stays visible everywhere — a11y target is 95+. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--ov-gold-bright);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

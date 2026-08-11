@@ -1,0 +1,57 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": [".env"],
+  "globalEnv": [
+    "DATABASE_URL",
+    "DIRECT_URL",
+    "NEXTAUTH_URL",
+    "AUTH_SECRET",
+    "AUTH_URL",
+    "AUTH_TRUST_HOST",
+    "RESEND_API_KEY",
+    "EMAIL_FROM",
+    "ANTHROPIC_API_KEY",
+    "STRIPE_SECRET_KEY",
+    "STRIPE_WEBHOOK_SECRET",
+    "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY",
+    "REALTIME_APP_ID",
+    "REALTIME_KEY",
+    "REALTIME_SECRET",
+    "REALTIME_CLUSTER",
+    "NEXT_PUBLIC_REALTIME_KEY",
+    "NEXT_PUBLIC_REALTIME_CLUSTER",
+    "QR_SIGNING_SECRET",
+    "NEXT_PUBLIC_APP_URL",
+    "NEXT_PUBLIC_EVENTS_URL",
+    "NODE_ENV"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
+    },
+    "@ovation/core#build": {
+      "inputs": ["prisma/schema.prisma"],
+      "outputs": [],
+      "cache": false
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "typecheck": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "lint": {
+      "outputs": []
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "clean": {
+      "cache": false
+    }
+  }
+}

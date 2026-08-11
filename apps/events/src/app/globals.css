@@ -1,0 +1,25 @@
+@import "@ovation/core/design/tokens.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Public event pages are themed PER EVENT. The layout writes --ev-* custom
+ * properties from Event.theme (see themeToCssVars in @ovation/core), so this
+ * file must not hardcode a single colour.
+ */
+@layer base {
+  body {
+    background: var(--ev-bg, var(--ov-bg));
+    color: var(--ev-ink, var(--ov-ink));
+    font-family: var(--ev-font-body, var(--ov-font-sans));
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--ev-font-display, var(--ov-font-display));
+    font-weight: var(--ev-display-weight, 400);
+    letter-spacing: var(--ev-tracking, 0);
+  }
+}

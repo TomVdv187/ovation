@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "preserve",
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "allowJs": true,
+    "plugins": [{ "name": "next" }],
+    "paths": {
+      "~/*": ["./src/*"]
+    }
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules", ".next", ".turbo"]
+}
