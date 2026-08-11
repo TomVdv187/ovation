@@ -18,7 +18,13 @@ interface Notice {
   message: string;
 }
 
-export function ChatPanel({ eventId }: { eventId: string }) {
+export function ChatPanel({
+  eventId,
+  autoApproveCosmetic,
+}: {
+  eventId: string;
+  autoApproveCosmetic: boolean;
+}) {
   const utils = api.useUtils();
   const history = api.agent.history.useQuery(
     { eventId, limit: 50 },
@@ -171,7 +177,7 @@ export function ChatPanel({ eventId }: { eventId: string }) {
             Proposes. Never acts without you.
           </p>
         </div>
-        <AutoApproveToggle onChanged={refresh} />
+        <AutoApproveToggle initial={autoApproveCosmetic} onChanged={refresh} />
       </header>
 
       <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
@@ -342,18 +348,26 @@ function NoticeCard({ notice }: { notice: Notice }) {
   );
 }
 
-function AutoApproveToggle({ onChanged }: { onChanged: () => Promise<void> }) {
-  const [on, setOn] = useState<boolean | null>(null);
+/**
+ * Governs COSMETIC actions and nothing else. Outbound and destructive
+ * proposals are gated by requiresApproval() in packages/core and cannot be
+ * waved through from here, whatever this switch says.
+ */
+function AutoApproveToggle({
+  initial,
+  onChanged,
+}: {
+  initial: boolean;
+  onChanged: () => Promise<void>;
+}) {
+  const [checked, setChecked] = useState(initial);
   const mutation = api.agent.setAutoApprove.useMutation({
     onSuccess: async (data) => {
-      setOn(data.autoApproveCosmetic);
+      setChecked(data.autoApproveCosmetic);
       await onChanged();
     },
+    onError: () => setChecked(initial),
   });
-
-  // Optimistic-only: the switch reflects what you last set it to this session.
-  // It governs COSMETIC actions and nothing else, whatever it says.
-  const checked = on ?? false;
 
   return (
     <label
@@ -368,9 +382,10 @@ function AutoApproveToggle({ onChanged }: { onChanged: () => Promise<void> }) {
         className="sr-only"
         checked={checked}
         disabled={mutation.isPending}
-        onChange={(e) =>
-          mutation.mutate({ autoApproveCosmetic: e.target.checked })
-        }
+        onChange={(e) => {
+          setChecked(e.target.checked);
+          mutation.mutate({ autoApproveCosmetic: e.target.checked });
+        }}
       />
       <span
         aria-hidden="true"

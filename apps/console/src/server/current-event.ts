@@ -14,7 +14,13 @@ export async function requireConsoleEvent() {
   const session = await auth();
   if (!session?.user?.id) redirect("/signin");
   if (!session.user.organisationId) {
-    return { session, event: null, organisationId: null } as const;
+    return {
+      session,
+      event: null,
+      organisationId: null,
+      organisationName: null,
+      autoApproveCosmetic: false,
+    } as const;
   }
 
   const event =
@@ -30,9 +36,20 @@ export async function requireConsoleEvent() {
       orderBy: { date: "desc" },
     }));
 
+  const organisation = await db.organisation.findUnique({
+    where: { id: session.user.organisationId },
+    select: { name: true, settings: true },
+  });
+  const settings = (organisation?.settings ?? {}) as Record<string, unknown>;
+
   return {
     session,
     event,
     organisationId: session.user.organisationId,
+    organisationName: organisation?.name ?? null,
+    // The contract has no procedure that reads organisation settings, and the
+    // chat's switch must not claim "off" while the database says "on". The
+    // console owns this read, so take it here and hand it down.
+    autoApproveCosmetic: settings.autoApproveCosmetic === true,
   } as const;
 }

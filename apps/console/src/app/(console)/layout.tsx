@@ -14,7 +14,7 @@ export default async function ConsoleLayout({
 }: {
   children: ReactNode;
 }) {
-  const { event, session } = await requireConsoleEvent();
+  const { event, session, autoApproveCosmetic } = await requireConsoleEvent();
 
   return (
     <div className="flex h-screen overflow-hidden bg-bg">
@@ -39,7 +39,10 @@ export default async function ConsoleLayout({
       </div>
 
       {event ? (
-        <ChatPanel eventId={event.id} />
+        <ChatPanel
+          eventId={event.id}
+          autoApproveCosmetic={autoApproveCosmetic}
+        />
       ) : (
         <aside className="flex w-chat shrink-0 items-center border-l border-line bg-surface p-6">
           <p className="text-sm text-ink-muted">
