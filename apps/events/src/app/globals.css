@@ -6,20 +6,175 @@
 
 /*
  * Public event pages are themed PER EVENT. The layout writes --ev-* custom
- * properties from Event.theme (see themeToCssVars in @ovation/core), so this
- * file must not hardcode a single colour.
+ * properties from Event.theme (see themeToCssVars in @ovation/core and the
+ * derived tokens in ~/lib/theme), so this file must not hardcode a single
+ * colour. Every declaration below either references a variable or describes
+ * structure, and the structural values are themselves variables the token
+ * layer overrides — flipping Event.theme.preset changes the corner radius, the
+ * letter-spacing and whether display type is set in capitals, not just the hue.
  */
 @layer base {
+  :root {
+    /* Fallbacks for surfaces rendered outside an event (the index, an error
+       boundary). A real event overwrites all of these. */
+    --ev-radius: 12px;
+    --ev-radius-sm: 8px;
+    --ev-rule: 2px;
+    --ev-kicker-tracking: 0.2em;
+    --ev-display-case: none;
+    --ev-display-leading: 1.05;
+    --ev-section-gap: 5.5rem;
+    --ev-hero-pad: 6.5rem;
+  }
+
   body {
     background: var(--ev-bg, var(--ov-bg));
     color: var(--ev-ink, var(--ov-ink));
     font-family: var(--ev-font-body, var(--ov-font-sans));
+    -webkit-font-smoothing: antialiased;
   }
+
   h1,
   h2,
   h3 {
     font-family: var(--ev-font-display, var(--ov-font-display));
     font-weight: var(--ev-display-weight, 400);
     letter-spacing: var(--ev-tracking, 0);
+  }
+
+  /* Keyboard focus has to be visible on every ground the theme can produce. */
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 3px solid var(--ev-focus, var(--ov-gold-bright));
+    outline-offset: 3px;
+  }
+
+  ::selection {
+    background: var(--ev-accent, var(--ov-gold));
+    color: var(--ev-on-accent, var(--ov-ink-inverse));
+  }
+
+  /* Anchored sections must not land under the sticky header. */
+  :target {
+    scroll-margin-top: 6rem;
+  }
+
+  [hidden] {
+    display: none !important;
+  }
+}
+
+@layer components {
+  /*
+   * The display treatment. One class, four theme variables: a wide-tracked
+   * light face gets capitals and open leading, a tight heavy one gets neither.
+   */
+  .ev-display {
+    font-family: var(--ev-font-display);
+    font-weight: var(--ev-display-weight, 400);
+    letter-spacing: var(--ev-tracking, 0);
+    line-height: var(--ev-display-leading);
+    text-transform: var(--ev-display-case);
+    text-wrap: balance;
+  }
+
+  .ev-kicker {
+    font-family: var(--ev-font-body);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1.4;
+    letter-spacing: var(--ev-kicker-tracking);
+    text-transform: uppercase;
+  }
+
+  /* Skip link: off-screen until focused, then unmissable. */
+  .ev-skip {
+    position: absolute;
+    left: 1rem;
+    top: -6rem;
+    z-index: 50;
+    padding: 0.75rem 1.25rem;
+    background: var(--ev-accent);
+    color: var(--ev-on-accent);
+    font-weight: 600;
+    border-radius: var(--ev-radius-sm);
+    transition: top var(--ov-dur, 200ms) var(--ov-ease, ease);
+  }
+  .ev-skip:focus {
+    top: 1rem;
+  }
+
+  .ev-card {
+    background: var(--ev-surface);
+    border: 1px solid var(--ev-line);
+    border-radius: var(--ev-radius);
+  }
+
+  /*
+   * Form controls. Sized for a thumb (48px) rather than a mouse, because the
+   * majority of registrations happen on a phone.
+   */
+  .ev-field {
+    width: 100%;
+    min-height: 3rem;
+    padding: 0.75rem 0.9rem;
+    background: var(--ev-bg);
+    color: var(--ev-ink);
+    border: 1px solid var(--ev-line);
+    border-radius: var(--ev-radius-sm);
+    font-family: var(--ev-font-body);
+    font-size: 1rem; /* never below 16px: iOS zooms on focus otherwise */
+    line-height: 1.4;
+  }
+  .ev-field::placeholder {
+    color: var(--ev-ink-muted);
+    opacity: 1;
+  }
+  .ev-field[aria-invalid="true"] {
+    border-color: var(--ev-danger, var(--ov-critical));
+    border-width: 2px;
+  }
+
+  select.ev-field {
+    appearance: none;
+    padding-right: 2.5rem;
+    background-image: linear-gradient(transparent, transparent);
+  }
+
+  .ev-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 3rem;
+    padding: 0.875rem 1.75rem;
+    background: var(--ev-accent);
+    color: var(--ev-on-accent);
+    border-radius: var(--ev-radius-sm);
+    font-family: var(--ev-font-body);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    text-align: center;
+    transition:
+      transform var(--ov-dur-fast, 120ms) var(--ov-ease, ease),
+      opacity var(--ov-dur-fast, 120ms) var(--ov-ease, ease);
+  }
+  .ev-button:hover {
+    opacity: 0.9;
+  }
+  .ev-button:active {
+    transform: translateY(1px);
+  }
+  .ev-button[aria-disabled="true"],
+  .ev-button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .ev-button-quiet {
+    background: transparent;
+    color: var(--ev-ink);
+    border: 1px solid var(--ev-line);
   }
 }
