@@ -5,6 +5,8 @@ import {
 } from "@ovation/core";
 import { db } from "@ovation/core/db";
 import { auth } from "./auth";
+import { agentRouter } from "./routers/agent";
+import { eventRouter } from "./routers/event";
 
 /**
  * The console composes the app router.
@@ -18,12 +20,16 @@ import { auth } from "./auth";
  *   guests: guestsRouter,
  */
 export const appRouter = createAppRouter({
-  event: contractRouters.event,
+  // Owned by Agent 1 · CONDUCTOR.
+  event: eventRouter,
+  agent: agentRouter,
+  // Owned by Agents 2–5. Still the NOT_IMPLEMENTED stubs; Agent 7 · CRITIC
+  // mounts them in Phase 3. The console renders a pending state for these,
+  // which is the correct Phase 2 behaviour rather than a fault.
   page: contractRouters.page,
   guests: contractRouters.guests,
   revenue: contractRouters.revenue,
   live: contractRouters.live,
-  agent: contractRouters.agent,
 });
 
 export type AppRouter = typeof appRouter;
