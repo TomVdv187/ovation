@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="OVATION Live">
+  <rect width="512" height="512" rx="96" fill="#0d0d0d"/>
+  <g fill="none" stroke="#d9b36c" stroke-width="24" stroke-linecap="round">
+    <path d="M140 148h-40v-40M372 148h40v-40M140 364h-40v40M372 364h40v40"/>
+  </g>
+  <circle cx="256" cy="256" r="76" fill="none" stroke="#d9b36c" stroke-width="24"/>
+  <circle cx="256" cy="256" r="26" fill="#d9b36c"/>
+</svg>
