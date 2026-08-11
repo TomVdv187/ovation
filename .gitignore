@@ -12,10 +12,9 @@ build/
 .turbo/
 *.tsbuildinfo
 
-# env
-.env
-.env.local
-.env.*.local
+# env — single source of truth is .env at the repo root, loaded by dotenv-cli.
+# .env.local is written by `vercel env pull`.
+.env*
 !.env.example
 
 # prisma
@@ -39,3 +38,6 @@ pnpm-debug.log*
 .vscode/*
 !.vscode/extensions.json
 .idea/
+
+# vercel
+.vercel

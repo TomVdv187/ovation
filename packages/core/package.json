@@ -17,16 +17,19 @@
     "build": "prisma generate",
     "typecheck": "prisma generate && tsc --noEmit",
     "db:generate": "prisma generate",
-    "db:push": "prisma db push",
-    "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio",
-    "db:reset": "prisma db push --force-reset && pnpm db:seed",
+    "db:push": "dotenv -e ../../.env -- tsx prisma/push.ts",
+    "db:push:tcp": "dotenv -e ../../.env -- prisma db push",
+    "db:seed": "dotenv -e ../../.env -- tsx prisma/seed.ts",
+    "db:studio": "dotenv -e ../../.env -- prisma studio",
+    "db:reset": "dotenv -e ../../.env -- tsx prisma/push.ts --force && pnpm db:seed",
     "clean": "rimraf .turbo node_modules/.prisma *.tsbuildinfo"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^0.10.4",
+    "@prisma/adapter-neon": "^6.19.3",
     "@prisma/client": "^6.2.1",
     "@trpc/server": "^11.0.0",
     "superjson": "^2.2.2",

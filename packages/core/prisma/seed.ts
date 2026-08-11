@@ -9,9 +9,9 @@
  *   tickets  €28,140  (Early 95 x80 + Standard 145 x92 + VIP Table 1200 x6)
  *   sponsors €24,500  (Helvion 12,500 + Nexa 6,000 + Corda 6,000)
  */
-import { Prisma, PrismaClient } from "@prisma/client";
-
-const db = new PrismaClient();
+// Use the shared client, not a fresh PrismaClient: it carries the Neon
+// serverless adapter, so seeding works on networks that block port 5432.
+import { db, Prisma } from "../src/db";
 
 // ── deterministic randomness ──────────────────────────────────
 
