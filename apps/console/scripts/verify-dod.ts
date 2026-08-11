@@ -17,7 +17,15 @@
  * requires to end at "blacktie".
  */
 import { db } from "@ovation/core/db";
-import { requiresApproval, type SideEffect } from "@ovation/core";
+import {
+  contractRouters,
+  createAppRouter,
+  createCallerFactory,
+  requiresApproval,
+  type SideEffect,
+} from "@ovation/core";
+import { agentRouter } from "../src/server/routers/agent";
+import { eventRouter } from "../src/server/routers/event";
 import { runAgentTurn } from "../src/server/agent/brain";
 import { executeApprovedActions } from "../src/server/agent/execute";
 import {
@@ -29,6 +37,15 @@ import {
 
 const TAG = "verify-dod";
 const SLUG = "meridian-summit-2026";
+
+/**
+ * The same composition as src/server/router.ts: the Conductor's two routers
+ * mounted, everything else left on the contract stubs. Built here without
+ * ./auth so the harness needs no NextAuth runtime.
+ */
+const createCaller = createCallerFactory(
+  createAppRouter({ ...contractRouters, event: eventRouter, agent: agentRouter }),
+);
 
 let passed = 0;
 let failed = 0;
@@ -393,10 +410,31 @@ async function main() {
     dressCode: "Swimwear",
   });
 
-  await db.agentAction.updateMany({
-    where: { id: toReject.id },
-    data: { status: "REJECTED", approvedBy: user.id, approvedAt: new Date() },
+  // Through the real router, not a direct write, so agent.reject is what is
+  // under test rather than a hand-rolled equivalent of it.
+  const caller = createCaller({
+    db,
+    session: {
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        organisationId: event.organisationId,
+        role: user.role,
+      },
+    },
+    headers: null,
   });
+
+  const rejectResult = await caller.agent.reject({
+    actionIds: [toReject.id],
+    reason: "Not the register we want.",
+  });
+  check(
+    "agent.reject reports REJECTED",
+    rejectResult.results[0]?.status === "REJECTED",
+    rejectResult.results[0]?.status,
+  );
   const rejected = await db.agentAction.findUnique({ where: { id: toReject.id } });
   check("the action is REJECTED", rejected?.status === "REJECTED", rejected?.status);
   check(
@@ -406,15 +444,45 @@ async function main() {
   );
   check("the rejected action has no executedAt", rejected?.executedAt === null);
 
-  const reExecute = await executeApprovedActions(db, [toReject.id], {
-    kind: "HUMAN",
-    userId: user.id,
+  const reExecute = await caller.agent.approve({ actionIds: [toReject.id] });
+  check(
+    "agent.approve cannot resurrect a rejected action",
+    reExecute.results[0]?.status === "REJECTED",
+    reExecute.results[0]?.status,
+  );
+
+  // agent.approve as the organiser presses it, end to end through the router.
+  const viaRouter = await proposeVia(base, "Set the dress code to White tie", {
+    summary: "Set the dress code to White tie",
+    dressCode: "White tie",
+  });
+  const approvedViaRouter = await caller.agent.approve({
+    actionIds: [viaRouter.id],
   });
   check(
-    "a rejected action cannot then be executed",
-    reExecute[0]?.status === "REJECTED",
-    reExecute[0]?.status,
+    "agent.approve executes a proposal",
+    approvedViaRouter.results[0]?.status === "EXECUTED",
+    approvedViaRouter.results[0]?.error ?? "",
   );
+  check(
+    "and the mutation landed",
+    (await themeField(event.id, "dressCode")) === "White tie",
+  );
+  await caller.agent
+    .approve({ actionIds: [(await proposeVia(base, "Back to black tie", { dressCode: "Black tie", preset: "blacktie" })).id] })
+    .catch(() => undefined);
+
+  const otherOrg = await db.organisation.findFirst({
+    where: { id: { not: event.organisationId } },
+    select: { id: true },
+  });
+  if (otherOrg) {
+    const leaked = await caller.agent
+      .approve({ actionIds: ["definitely-not-mine"] })
+      .then(() => false)
+      .catch(() => true);
+    check("approving an unknown action id is refused", leaked);
+  }
 
   // ── 5 · A reload restores the thread and the open cards ───────
   console.log("\n5 · agent.history restores the thread and open proposals");
@@ -447,6 +515,48 @@ async function main() {
     "open proposals survive for the reload",
     openProposals.some((p) => p.id === dateProposal!.id),
     `${openProposals.length} open`,
+  );
+
+  // ── 6 · Guests / Revenue / Live answer NOT_IMPLEMENTED ────────
+  console.log("\n6 · The other agents' routers answer NOT_IMPLEMENTED, calmly");
+
+  const stubs: [string, () => Promise<unknown>][] = [
+    ["guests.list", () => caller.guests.list({ eventId: event.id, limit: 50, sortBy: "engagementScore", sortDir: "desc" })],
+    ["revenue.summary", () => caller.revenue.summary({ eventId: event.id, compareToPreviousEdition: true })],
+    ["live.ops", () => caller.live.ops({ eventId: event.id })],
+    ["page.render", () => caller.page.render({ slug: SLUG, preview: true })],
+  ];
+  for (const [name, call] of stubs) {
+    const code = await call()
+      .then(() => "NO ERROR")
+      .catch((e: { code?: string }) => e.code ?? "UNKNOWN");
+    check(
+      `${name} throws NOT_IMPLEMENTED, which the view renders as a pending panel`,
+      code === "NOT_IMPLEMENTED",
+      code,
+    );
+  }
+
+  // ...while the Conductor's own routers return real data on the same call.
+  const stats = await caller.event.stats({ eventId: event.id });
+  check("event.stats returns the seeded numbers", stats.registrations === 159, `${stats.registrations} registrations`);
+  check("event.stats knows the capacity", stats.capacity === 250, `${stats.capacity}`);
+  check(
+    "event.stats predicts a show-rate below 1",
+    stats.predictedShowRate > 0 && stats.predictedShowRate < 1,
+    `${Math.round(stats.predictedShowRate * 100)}%`,
+  );
+  const curve = await caller.event.registrationsOverTime({ eventId: event.id, days: 60 });
+  check("registrationsOverTime returns 60 points", curve.points.length === 60, `${curve.points.length}`);
+  check(
+    "the cumulative curve only ever climbs",
+    curve.points.every((p, i) => i === 0 || p.cumulative >= curve.points[i - 1]!.cumulative),
+  );
+  const restored = await caller.agent.history({ eventId: event.id, limit: 50 });
+  check(
+    "agent.history returns the thread and the open cards",
+    restored.messages.length > 0 && restored.openProposals.length > 0,
+    `${restored.messages.length} messages, ${restored.openProposals.length} open`,
   );
 
   // ── invariants ────────────────────────────────────────────────
