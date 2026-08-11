@@ -123,7 +123,7 @@ self-hosted Soketi); a broker round trip never sits inside the check-in budget.
 
 - `live.feed` / `live.guestFeed` — the contract's tRPC subscriptions.
 - `GET /api/live/stream` — SSE for browsers, because `EventSource` cannot set
-  the header that says which channel is listening. See CONTRACT_CHANGES CC-004;
+  the header that says which channel is listening. See CONTRACT_CHANGES CC-005;
   when that lands this route goes away.
 
 Every envelope carries a wall time and a sequence number, and the bus keeps a

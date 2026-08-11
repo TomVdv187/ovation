@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
  * Cue configuration and the manual tick.
  *
  * Configuration lives in memory (there is no Cue table — see
- * CONTRACT_CHANGES CC-003), so this reads and writes the running set for one
+ * CONTRACT_CHANGES CC-004), so this reads and writes the running set for one
  * event. POST accepts an array matching `cueSchema`.
  *
  * `?tick=1` on POST runs the time-based evaluation once, which is how a

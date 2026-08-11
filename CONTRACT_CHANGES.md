@@ -30,7 +30,7 @@ and updates every consumer.
 
 <!-- append below this line -->
 
-### CC-001 · Persist the check-in idempotency key
+### CC-002 · Persist the check-in idempotency key
 - **Requested by:** Agent 5 · MAÎTRE D'
 - **Date:** 2026-08-11
 - **What:** `CheckIn.idempotencyKey String? @unique` (or `@@unique([eventId, idempotencyKey])`) in `prisma/schema.prisma`.
@@ -51,7 +51,7 @@ and updates every consumer.
 - **Blast radius:** additive, nullable column. No consumer reads it; Agent 2 ·
   MAISON does not write `CheckIn`. Nothing else changes.
 
-### CC-002 · Somewhere to record an introduction
+### CC-003 · Somewhere to record an introduction
 - **Requested by:** Agent 5 · MAÎTRE D'
 - **Date:** 2026-08-11
 - **What:** an `Introduction` model — `{ id, eventId, guestId, withGuestId, introducedBy String?, createdAt }`
@@ -68,7 +68,7 @@ and updates every consumer.
   `live.markIntroduced` and `live.matchmaking` read or write it, both of which
   are ours.
 
-### CC-003 · Somewhere to keep cue configuration
+### CC-004 · Somewhere to keep cue configuration
 - **Requested by:** Agent 5 · MAÎTRE D'
 - **Date:** 2026-08-11
 - **What:** a `Cue` model mirroring `cueSchema` — `{ id, eventId, label, trigger Json, auto Boolean, enabled Boolean }`.
@@ -81,7 +81,7 @@ and updates every consumer.
   (`apps/live/src/server/live/cues.ts`). Behaviour is correct; persistence is not.
 - **Blast radius:** new model. Only the live app reads it.
 
-### CC-004 · Let a feed subscriber say which channel it is
+### CC-005 · Let a feed subscriber say which channel it is
 - **Requested by:** Agent 5 · MAÎTRE D'
 - **Date:** 2026-08-11
 - **What:** add `channel: z.enum(["guest-app", "host", "screens", "ops", "door"]).optional()`

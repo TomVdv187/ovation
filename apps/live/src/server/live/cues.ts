@@ -34,7 +34,7 @@ import { emit } from "~/server/realtime";
  * went off.
  *
  * Cue definitions live in memory with a sane default set. There is no Cue
- * table in the schema; see CONTRACT_CHANGES CC-003.
+ * table in the schema; see CONTRACT_CHANGES CC-004.
  */
 
 const CUE_ACTION_MARKER = "ovationCue";
