@@ -231,6 +231,9 @@ async function dispatchTool(
       note: "Nothing has changed. The organiser sees a card and decides. Tell them what you proposed and what approving it would do.",
     });
   } catch (error) {
+    // The model gets the rejection as a tool_result and can correct itself, but
+    // a malformed tool schema is our bug, not its mistake, so make it loud.
+    console.warn(`[agent] tool "${use.name}" rejected:`, error);
     return fail(
       error instanceof Error
         ? `Tool call rejected: ${error.message}`

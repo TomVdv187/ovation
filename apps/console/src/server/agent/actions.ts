@@ -73,10 +73,29 @@ export function buildPayload(
   raw: unknown,
   eventId: string,
 ): AgentActionPayload {
-  const input = { ...(raw as Record<string, unknown>), eventId };
+  const flat = (raw ?? {}) as Record<string, unknown>;
+  const input = { ...flat, eventId };
   switch (tool) {
-    case "update_event_theme":
-      return { type: tool, input: updateEventThemeInput.parse(input) };
+    case "update_event_theme": {
+      // The tool schema is flat (preset, dressCode, ...) because a flat shape
+      // is far easier for a model to fill in correctly. The contract nests it
+      // under `theme`, so reassemble here.
+      const theme =
+        flat.theme && typeof flat.theme === "object"
+          ? (flat.theme as Record<string, unknown>)
+          : dropUndefined({
+              preset: flat.preset,
+              palette: flat.palette,
+              typography: flat.typography,
+              dressCode: flat.dressCode,
+              heroImage: flat.heroImage,
+              notes: flat.notes,
+            });
+      return {
+        type: tool,
+        input: updateEventThemeInput.parse({ eventId, theme }),
+      };
+    }
     case "update_agenda":
       return { type: tool, input: updateAgendaInput.parse(input) };
     case "change_event_date":
@@ -88,6 +107,14 @@ export function buildPayload(
     case "draft_sponsor_offer":
       return { type: tool, input: draftSponsorOfferInput.parse(input) };
   }
+}
+
+function dropUndefined(
+  obj: Record<string, unknown>,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([, v]) => v !== undefined && v !== null),
+  );
 }
 
 /** A one-line human summary, used when the model does not supply its own. */
