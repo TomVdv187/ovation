@@ -8,7 +8,10 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "echo \"(no tests yet — Agent 4 TREASURY)\" && exit 0",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verify": "tsx --env-file=../../.env scripts/verify-seed.ts",
+    "offer:preview": "tsx --env-file=../../.env scripts/draft-offer-preview.ts",
     "clean": "rimraf .turbo *.tsbuildinfo"
   },
   "dependencies": {
@@ -20,6 +23,8 @@
   "devDependencies": {
     "@types/node": "^22.10.2",
     "rimraf": "^6.0.1",
-    "typescript": "^5.7.2"
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
   }
 }

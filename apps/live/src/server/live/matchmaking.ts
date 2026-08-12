@@ -180,7 +180,7 @@ function clamp01(n: number): number {
 // ── introduction tracking ─────────────────────────────────────
 
 /**
- * There is no Introduction table in the schema (CONTRACT_CHANGES CC-003), and
+ * There is no Introduction table in the schema (CONTRACT_CHANGES CC-002), and
  * writing this onto another agent's Guest.notes column would be worse than
  * keeping it in memory. Scoped per process, which covers one night's ops on
  * one box; it does not survive a restart, and the host UI says so.

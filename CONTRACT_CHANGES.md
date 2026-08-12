@@ -30,75 +30,6 @@ and updates every consumer.
 
 <!-- append below this line -->
 
-### CC-002 · Persist the check-in idempotency key
-- **Requested by:** Agent 5 · MAÎTRE D'
-- **Date:** 2026-08-11
-- **What:** `CheckIn.idempotencyKey String? @unique` (or `@@unique([eventId, idempotencyKey])`) in `prisma/schema.prisma`.
-- **Why:** `checkinInput` carries `idempotencyKey` and the contract's own comment
-  says it is what makes replaying an offline queue safe — but there is nowhere
-  to store it, so the key currently survives only in one process's memory.
-  Today's correctness rests entirely on `CheckIn.guestId @unique`, which is a
-  *different* guarantee: it dedupes by guest, not by scan. Two consequences.
-  A restart between a write and its acknowledgement loses the record that this
-  key was applied, and two app instances behind a load balancer cannot dedupe
-  concurrent replays of the same key at all — they collide on the unique index
-  and one of them takes the `P2002` recovery path.
-- **Workaround in place:** an in-process `Map` of in-flight promises keyed by
-  `eventId:idempotencyKey` coalesces concurrent duplicates, and a caught `P2002`
-  is translated into `ALREADY_CHECKED_IN` with the winning row's timestamp. The
-  externally visible behaviour is already correct — this change makes it correct
-  for reasons that survive a restart. See `apps/live/src/server/live/checkin.ts`.
-- **Blast radius:** additive, nullable column. No consumer reads it; Agent 2 ·
-  MAISON does not write `CheckIn`. Nothing else changes.
-
-### CC-003 · Somewhere to record an introduction
-- **Requested by:** Agent 5 · MAÎTRE D'
-- **Date:** 2026-08-11
-- **What:** an `Introduction` model — `{ id, eventId, guestId, withGuestId, introducedBy String?, createdAt }`
-  with `@@unique([eventId, guestId, withGuestId])`.
-- **Why:** `live.markIntroduced` is in the contract and the matchmaking output
-  carries an `introduced` flag, but no table backs either. A host who marks an
-  introduction and then reloads their phone loses it, and a second host is
-  offered the same introduction the first already made.
-- **Workaround in place:** an in-process `Map<eventId, Set<pairKey>>` in
-  `apps/live/src/server/live/matchmaking.ts`. It covers one night on one box and
-  is honest about it. Writing this onto `Guest.notes` — a column Agent 3 · ORACLE
-  owns — would have been worse than losing it.
-- **Blast radius:** new model, new relation on `Guest`/`Event`. Only
-  `live.markIntroduced` and `live.matchmaking` read or write it, both of which
-  are ours.
-
-### CC-004 · Somewhere to keep cue configuration
-- **Requested by:** Agent 5 · MAÎTRE D'
-- **Date:** 2026-08-11
-- **What:** a `Cue` model mirroring `cueSchema` — `{ id, eventId, label, trigger Json, auto Boolean, enabled Boolean }`.
-- **Why:** `cueSchema` and `cueTriggerSchema` are in the contract, so cues are
-  meant to be configurable per event, but there is no table to configure. An
-  organiser who disables the capacity cue at 19:00 gets it back on the next
-  deploy.
-- **Workaround in place:** a default cue set defined in code, overridable at
-  runtime through `POST /api/live/cues?eventId=…` and held in memory
-  (`apps/live/src/server/live/cues.ts`). Behaviour is correct; persistence is not.
-- **Blast radius:** new model. Only the live app reads it.
-
-### CC-005 · Let a feed subscriber say which channel it is
-- **Requested by:** Agent 5 · MAÎTRE D'
-- **Date:** 2026-08-11
-- **What:** add `channel: z.enum(["guest-app", "host", "screens", "ops", "door"]).optional()`
-  to `liveFeedInput`.
-- **Why:** `announceInput.channels` addresses an announcement to a subset of
-  clients, so a subscriber has to declare which subset it belongs to — otherwise
-  a message meant for the guest app also lands on the info screens, and the
-  delivery count in `announceOutput` cannot be anything better than a guess.
-  `liveFeedInput` has no room for it. The awkward part is `EventSource`, which
-  cannot set request headers, so a browser cannot pass it out of band either.
-- **Workaround in place:** the tRPC `live.feed` subscription reads an
-  `x-ovation-live-channel` header (fine for a server-side caller or any client
-  that can set headers), and the browser uses `GET /api/live/stream?channel=…`,
-  a route handler over the same event bus. Both doorways, one bus — but two
-  doorways exist only because of this gap.
-- **Blast radius:** optional field on an existing input. No consumer breaks;
-  once it lands, `/api/live/stream` becomes redundant and we delete it.
 ### CC-001 · `draft_emails` / `draft_sponsor_offer` payloads cannot carry the copy being approved
 
 - **Requested by:** Agent 1 · CONDUCTOR
@@ -132,3 +63,144 @@ and updates every consumer.
   `packages/guests` if the Oracle's `personaliseInvite` wants to hand finished
   copy to a `draft_emails` action rather than writing `EmailMessage` rows
   itself.
+### CC-001 · Order needs the buyer's name
+- **Requested by:** Agent 2 · MAISON
+- **Date:** 2026-08-11
+- **What:** a `buyerName String?` column on `Order` (or an equivalent field in
+  the ticketing contract), set when a checkout is opened.
+- **Why:** a ticket buyer is not a Guest until the payment settles, so between
+  `startCheckout` and `fulfilOrder` there is nowhere to keep the name they
+  typed. Without it the Guest created on payment has no name, which is what the
+  console's guest list and the door list both read.
+- **Workaround in place:** the name travels out-of-band and is put back on the
+  Guest at fulfilment — in `metadata.buyerName` on the Stripe Checkout Session
+  for the real path, and in a query parameter for the local no-Stripe checkout.
+  Both are read in `apps/events/src/server/ticketing.ts` (`fulfilOrder`), which
+  is the only place to unwind.
+- **Blast radius:** `packages/core/prisma/schema.prisma` (one nullable column),
+  and `apps/events/src/server/ticketing.ts`. Nobody else reads it. Agent 4 ·
+  TREASURY sums `Order.amountCents` and is unaffected.
+
+### CC-002 · page.render carries no ticket tiers
+- **Requested by:** Agent 2 · MAISON
+- **Date:** 2026-08-11
+- **What:** `pageRenderOutput` exposes `ticketTiersAvailable: boolean` but no
+  tier detail. A `tiers: ticketTierSchema[]` field (or a `pageSectionSchema`
+  variant of kind `"tickets"`) would let the whole public surface come from one
+  procedure.
+- **Why:** the tier picker needs name, price, quota, sold and status, so
+  `/e/[slug]/tickets` queries Prisma directly instead of going through the
+  contract. That is a second source of truth for what is on sale, and it means
+  the console cannot preview the ticket step the way it can preview the page.
+- **Workaround in place:** `apps/events/src/server/event.ts` (`findPublicEvent`,
+  `tierAvailability`) reads the tiers itself. Availability rules — on sale, in
+  window, seats left — live in `tierAvailability` and would move with the
+  contract.
+- **Blast radius:** `packages/core/src/schemas/event.ts` (additive), plus the
+  `page.render` implementation and the tickets page in `apps/events`. Additive,
+  so no existing consumer breaks.
+### CC-001 · `revenue.sponsorUpsellCandidates` should be a mutation
+- **Requested by:** Agent 4 · TREASURY
+- **Date:** 2026-08-11
+- **What:** change `sponsorUpsellCandidates` from `.query()` to `.mutation()` in
+  `packages/core/src/trpc/routers/revenue.ts`. No input/output schema change.
+- **Why:** `sponsorUpsellCandidatesOutput` has an `agentActionId` field, and the
+  drafted Gold-upgrade copy has nowhere else to live — the output schema has no
+  field for it, so the copy must be persisted on an AgentAction. That makes the
+  procedure a writer. It is also the one place that calls the Anthropic API, so
+  a cold call takes seconds; as a query the console may prefetch it on every
+  Overview load and tRPC may serve it over a cacheable GET.
+- **Workaround in place:** it is implemented as a query that writes, and the
+  write is made idempotent — an existing PROPOSED `draft_sponsor_offer` tagged
+  `payload.source === "revenue.upsell_radar"` for the same sponsor is reused and
+  returned rather than re-drafted, so repeat calls cost nothing and create
+  nothing. Flipping it to a mutation needs only the one-word change above plus
+  `useQuery` → `useMutation` at the call site.
+- **Blast radius:** Agent 1 · CONSOLE, if it has already wired the call site.
+  Nothing else consumes it.
+
+### CC-002 · `@ovation/core` typecheck and build race on `prisma generate`
+- **Requested by:** Agent 4 · TREASURY
+- **Date:** 2026-08-11
+- **What:** in `packages/core/package.json`, `typecheck` runs
+  `prisma generate && tsc --noEmit` while `build` runs `prisma generate`. Turbo
+  schedules both concurrently, so two `prisma generate` processes race on the
+  same engine binary. Suggested fix: drop `prisma generate` from `typecheck` and
+  let `"dependsOn": ["^build"]` supply it, since `@ovation/core#build` already
+  does exactly that.
+- **Why:** `pnpm typecheck` from the repo root fails on Windows with
+  `EPERM: operation not permitted, rename '…/query_engine-windows.dll.node.tmp…'`.
+  It is a race, so it is intermittent, and it fails the whole run rather than
+  one task. `pnpm typecheck --concurrency=1` is a clean pass.
+- **Workaround in place:** none needed inside packages/revenue — run the root
+  typecheck with `--concurrency=1`, or run it twice (the second run is cached).
+- **Blast radius:** every agent running the root typecheck on Windows.
+### CC-001 · Persist the check-in idempotency key
+- **Requested by:** Agent 5 · MAÎTRE D'
+- **Date:** 2026-08-11
+- **What:** `CheckIn.idempotencyKey String? @unique` (or `@@unique([eventId, idempotencyKey])`) in `prisma/schema.prisma`.
+- **Why:** `checkinInput` carries `idempotencyKey` and the contract's own comment
+  says it is what makes replaying an offline queue safe — but there is nowhere
+  to store it, so the key currently survives only in one process's memory.
+  Today's correctness rests entirely on `CheckIn.guestId @unique`, which is a
+  *different* guarantee: it dedupes by guest, not by scan. Two consequences.
+  A restart between a write and its acknowledgement loses the record that this
+  key was applied, and two app instances behind a load balancer cannot dedupe
+  concurrent replays of the same key at all — they collide on the unique index
+  and one of them takes the `P2002` recovery path.
+- **Workaround in place:** an in-process `Map` of in-flight promises keyed by
+  `eventId:idempotencyKey` coalesces concurrent duplicates, and a caught `P2002`
+  is translated into `ALREADY_CHECKED_IN` with the winning row's timestamp. The
+  externally visible behaviour is already correct — this change makes it correct
+  for reasons that survive a restart. See `apps/live/src/server/live/checkin.ts`.
+- **Blast radius:** additive, nullable column. No consumer reads it; Agent 2 ·
+  MAISON does not write `CheckIn`. Nothing else changes.
+
+### CC-002 · Somewhere to record an introduction
+- **Requested by:** Agent 5 · MAÎTRE D'
+- **Date:** 2026-08-11
+- **What:** an `Introduction` model — `{ id, eventId, guestId, withGuestId, introducedBy String?, createdAt }`
+  with `@@unique([eventId, guestId, withGuestId])`.
+- **Why:** `live.markIntroduced` is in the contract and the matchmaking output
+  carries an `introduced` flag, but no table backs either. A host who marks an
+  introduction and then reloads their phone loses it, and a second host is
+  offered the same introduction the first already made.
+- **Workaround in place:** an in-process `Map<eventId, Set<pairKey>>` in
+  `apps/live/src/server/live/matchmaking.ts`. It covers one night on one box and
+  is honest about it. Writing this onto `Guest.notes` — a column Agent 3 · ORACLE
+  owns — would have been worse than losing it.
+- **Blast radius:** new model, new relation on `Guest`/`Event`. Only
+  `live.markIntroduced` and `live.matchmaking` read or write it, both of which
+  are ours.
+
+### CC-003 · Somewhere to keep cue configuration
+- **Requested by:** Agent 5 · MAÎTRE D'
+- **Date:** 2026-08-11
+- **What:** a `Cue` model mirroring `cueSchema` — `{ id, eventId, label, trigger Json, auto Boolean, enabled Boolean }`.
+- **Why:** `cueSchema` and `cueTriggerSchema` are in the contract, so cues are
+  meant to be configurable per event, but there is no table to configure. An
+  organiser who disables the capacity cue at 19:00 gets it back on the next
+  deploy.
+- **Workaround in place:** a default cue set defined in code, overridable at
+  runtime through `POST /api/live/cues?eventId=…` and held in memory
+  (`apps/live/src/server/live/cues.ts`). Behaviour is correct; persistence is not.
+- **Blast radius:** new model. Only the live app reads it.
+
+### CC-004 · Let a feed subscriber say which channel it is
+- **Requested by:** Agent 5 · MAÎTRE D'
+- **Date:** 2026-08-11
+- **What:** add `channel: z.enum(["guest-app", "host", "screens", "ops", "door"]).optional()`
+  to `liveFeedInput`.
+- **Why:** `announceInput.channels` addresses an announcement to a subset of
+  clients, so a subscriber has to declare which subset it belongs to — otherwise
+  a message meant for the guest app also lands on the info screens, and the
+  delivery count in `announceOutput` cannot be anything better than a guess.
+  `liveFeedInput` has no room for it. The awkward part is `EventSource`, which
+  cannot set request headers, so a browser cannot pass it out of band either.
+- **Workaround in place:** the tRPC `live.feed` subscription reads an
+  `x-ovation-live-channel` header (fine for a server-side caller or any client
+  that can set headers), and the browser uses `GET /api/live/stream?channel=…`,
+  a route handler over the same event bus. Both doorways, one bus — but two
+  doorways exist only because of this gap.
+- **Blast radius:** optional field on an existing input. No consumer breaks;
+  once it lands, `/api/live/stream` becomes redundant and we delete it.

@@ -56,7 +56,7 @@ type GuestRow = Prisma.GuestGetPayload<{ select: typeof GUEST_SELECT }>;
  * rather than racing on the unique index.
  *
  * This is a per-process optimisation, not the correctness mechanism — the
- * unique constraint is. See CONTRACT_CHANGES CC-002 for the persisted
+ * unique constraint is. See CONTRACT_CHANGES CC-001 for the persisted
  * idempotency key that would make dedupe survive a restart.
  */
 const globalForInflight = globalThis as unknown as {
