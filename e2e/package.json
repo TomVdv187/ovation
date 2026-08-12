@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "playwright test",
-    "test:ui": "playwright test --ui",
+    "test": "dotenv -e ../.env -- playwright test",
+    "test:ui": "dotenv -e ../.env -- playwright test --ui",
     "install:browsers": "playwright install --with-deps chromium",
     "typecheck": "tsc --noEmit",
     "clean": "rimraf .turbo playwright-report test-results *.tsbuildinfo"
@@ -19,6 +19,7 @@
     "@ovation/guests": "workspace:*",
     "@ovation/revenue": "workspace:*",
     "@ovation/events": "workspace:*",
-    "@ovation/live": "workspace:*"
+    "@ovation/live": "workspace:*",
+    "dotenv-cli": "^8.0.0"
   }
 }

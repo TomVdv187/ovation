@@ -41,3 +41,9 @@ pnpm-debug.log*
 
 # vercel
 .vercel
+
+# Pinned TLS-interception CA (machine-specific, regenerated per machine)
+certs/
+
+# Agent isolation worktrees
+.claude/worktrees/

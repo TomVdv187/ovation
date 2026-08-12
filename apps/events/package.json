@@ -42,6 +42,7 @@
     "typescript": "^5.7.2"
   },
   "exports": {
-    "./page-router": "./src/server/routers/page.ts"
+    "./page-router": "./src/server/routers/page.ts",
+    "./ticketing": "./src/server/ticketing.ts"
   }
 }

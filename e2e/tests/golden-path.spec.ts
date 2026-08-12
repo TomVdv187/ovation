@@ -162,7 +162,7 @@ test("2 · a theme change in the console restyles the public page", async ({
   page,
 }) => {
   await page.goto(`${EVENTS}/e/${fixture.slug}`);
-  const before = await page.locator("body").getAttribute("data-theme-preset");
+  const before = await page.locator("#main").getAttribute("data-theme-preset");
 
   // The mutation an approved `update_event_theme` proposal performs. The chat
   // turn that would produce that proposal needs an API key; see the header.
@@ -172,7 +172,7 @@ test("2 · a theme change in the console restyles the public page", async ({
   });
 
   await page.goto(`${EVENTS}/e/${fixture.slug}`);
-  const after = await page.locator("body").getAttribute("data-theme-preset");
+  const after = await page.locator("#main").getAttribute("data-theme-preset");
   expect(after).toBe("blacktie");
   expect(after).not.toBe(before);
   await expect(page.getByText(/black tie/i).first()).toBeVisible();
@@ -185,6 +185,10 @@ test("3 · a guest registers and appears scored in guest intelligence", async ({
   const email = `${TAG}-registrant@example.invalid`;
   await page.getByLabel(/name/i).first().fill("Imogen Hart");
   await page.getByLabel(/email/i).first().fill(email);
+  // The form refuses to submit without GDPR consent — by design, and asserted
+  // by apps/events' own verify:registration. A registration test that does not
+  // tick it is testing the validation, not the happy path.
+  await page.getByRole("checkbox").first().check();
   await page.getByRole("button", { name: /register|confirm|reserve/i }).first().click();
   await expect(page.getByText(/confirmed|you're in|thank you/i).first()).toBeVisible({
     timeout: 20_000,
@@ -254,7 +258,7 @@ test("4 · a ticket purchase moves revenue.summary", async ({ page }) => {
   await page.goto(`${EVENTS}/e/${fixture.slug}/tickets`);
   await expect(page.getByText("Priced")).toBeVisible();
 
-  const { startCheckout } = await import("../../apps/events/src/server/ticketing");
+  const { startCheckout } = await import("@ovation/events/ticketing");
   const outcome = await startCheckout({
     slug: fixture.slug,
     tierId: paid.id,

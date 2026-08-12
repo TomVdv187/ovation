@@ -63,7 +63,12 @@ export default async function EventLayout({
         </Container>
       </header>
 
-      <main id="main">{children}</main>
+      {/* The active preset, as markup. The theme reaches the page as CSS
+          variables, which means nothing in the DOM says which theme is on —
+          fine for a browser, useless for a test or a bug report. */}
+      <main id="main" data-theme-preset={page.theme.preset ?? "classic"}>
+        {children}
+      </main>
 
       <footer className="border-t border-ev-line">
         <Container className="flex flex-col gap-4 py-12 text-sm text-ev-ink-muted sm:flex-row sm:items-center sm:justify-between">
