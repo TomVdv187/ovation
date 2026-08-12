@@ -1,0 +1,45 @@
+Phase 3 step 3a: three defects the adversarial pass found in the approval gate
+
+CONDUCTOR's claim is that agent.approve is the only path to a side effect.
+That is true. What was not true is that agent.approve is safe.
+
+1. CROSS-TENANT WRITE via the approval `patch` (critical).
+   agent.approve checked that the ACTION belongs to the caller's organisation.
+   Nothing re-checked the event named inside the payload, and `patch` is merged
+   into payload.input before execution. So:
+     approve({ actionIds: [my own action],
+               patch: { input: { eventId: "<any event in the database>" } } })
+   executed the mutation against that event. Any signed-in user of any
+   organisation could restyle, re-date or rewrite the agenda of any event in
+   the product. Reproduced against two rig organisations (check A2) - org A
+   rewrote org B's theme, status EXECUTED.
+   Fixed by pinning eventId (and type) from the stored payload in applyPatch,
+   plus assertEventInOrg inside the transaction as a second lock.
+
+2. DOUBLE EXECUTION under concurrent approval (serious).
+   The transaction re-read the row and checked its status, with a comment
+   saying that stopped two concurrent approvals both executing. It did not: at
+   READ COMMITTED both read PROPOSED and both proceeded. Two parallel approves
+   of one draft_emails action produced TWO sets of EmailMessage rows - a
+   double-clicked Approve drafts the campaign twice. Reproduced (check A7).
+   Fixed with a conditional updateMany claim (compare-and-swap) before the
+   mutation runs; the loser sees count 0 and rolls back.
+
+3. CROSS-TENANT READ in agent.history (serious).
+   agentAction was filtered by organisationId; chatMessage was filtered only by
+   eventId. Any signed-in user could read the full agent transcript of any
+   event by id, including whatever the organiser typed. Reproduced (check A9).
+   Fixed by scoping through the event relation.
+
+Also verified as holding, unchanged: cross-tenant approve is FORBIDDEN;
+nothing reaches SENT; OUTBOUND refuses AUTO approval; a rejected action cannot
+be approved; a firing autoFire pricing rule creates no tier and only proposes;
+personaliseInvite writes nothing without a key. Full output in
+scripts/critic/out-approval.txt.
+
+Harness: apps/console/scripts/critic-approval.ts (must run under
+--conditions=react-server) and scripts/critic/rig.ts, which builds two throwaway
+organisations. Meridian Summit 2026 is never touched.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01VnYkrWzV3EHnkHJAXo1n6v

@@ -109,25 +109,44 @@ async function executeOne(
 
   try {
     const result = await db.$transaction(async (tx) => {
-      // Re-read inside the transaction so two concurrent approvals cannot both
-      // execute the same proposal.
-      const row = await tx.agentAction.findUnique({ where: { id: actionId } });
-      if (!row || (row.status !== "PROPOSED" && row.status !== "APPROVED")) {
-        throw new Error("Action was already decided.");
-      }
-
-      const payload = parsePayload(applyPatch(row.payload, patch));
-
-      const mutationResult = await performMutation(tx, payload);
-
-      await tx.agentAction.update({
-        where: { id: actionId },
+      /**
+       * CLAIM THE ROW FIRST — Agent 7 · CRITIC, Phase 3.
+       *
+       * This used to be a `findUnique` followed by a status check, with the
+       * comment "so two concurrent approvals cannot both execute the same
+       * proposal". It did not: at READ COMMITTED both transactions read
+       * PROPOSED, both passed the check, and both ran the mutation. Check A7 in
+       * apps/console/scripts/critic-approval.ts fired two `agent.approve` calls
+       * for one `draft_emails` action and got TWO sets of EmailMessage rows —
+       * i.e. a double-clicked Approve button drafts the campaign twice.
+       *
+       * A conditional updateMany is a compare-and-swap: exactly one transaction
+       * can move the row out of PROPOSED/APPROVED, and the loser sees count 0
+       * and rolls back before touching anything.
+       */
+      const claimed = await tx.agentAction.updateMany({
+        where: { id: actionId, status: { in: ["PROPOSED", "APPROVED"] } },
         data: {
           status: "EXECUTED",
           approvedBy:
             source.kind === "HUMAN" ? source.userId : "auto-approve:COSMETIC",
           approvedAt: new Date(),
           executedAt: new Date(),
+        },
+      });
+      if (claimed.count === 0) throw new Error("Action was already decided.");
+
+      const row = await tx.agentAction.findUnique({ where: { id: actionId } });
+      if (!row) throw new Error("Action was already decided.");
+
+      const payload = parsePayload(applyPatch(row.payload, patch));
+      await assertEventInOrg(tx, payload.input.eventId, row.organisationId);
+
+      const mutationResult = await performMutation(tx, payload);
+
+      await tx.agentAction.update({
+        where: { id: actionId },
+        data: {
           result: mutationResult as unknown as object,
           error: null,
           ...(patch !== undefined ? { payload: payload as unknown as object } : {}),
@@ -150,19 +169,61 @@ async function executeOne(
   }
 }
 
-/** Organiser tweaks to the payload before executing (agent.approve `patch`). */
+/**
+ * Organiser tweaks to the payload before executing (agent.approve `patch`).
+ *
+ * SECURITY — Agent 7 · CRITIC, Phase 3. `eventId` and `type` are pinned from
+ * the STORED payload and cannot be patched.
+ *
+ * Found by testing, not by reading: `agent.approve` checks that the ACTION
+ * belongs to the caller's organisation (`assertActionsBelongToOrg`) but nothing
+ * re-checked the event named inside the payload. Approving an action of your
+ * own with `patch: { input: { eventId: "<someone else's event>" } }` executed
+ * the mutation against that event — a signed-in user of any organisation could
+ * restyle, re-date or rewrite the agenda of any event in the database. The
+ * reproduction is check A2 in apps/console/scripts/critic-approval.ts, which
+ * rewrote org B's theme from an org A session.
+ *
+ * Pinning here closes it for every tool at once: `draft_emails` already scopes
+ * its guests by `eventId`, and `draft_sponsor_offer` already scopes its sponsor
+ * by `eventId`, so an unpatched `eventId` makes every other id in the payload
+ * unreachable outside the event. `assertEventInOrg` below is the second lock.
+ */
 function applyPatch(payload: unknown, patch: unknown): unknown {
   if (patch === undefined || patch === null) return payload;
   if (typeof patch !== "object" || Array.isArray(patch)) return payload;
   const base = (payload ?? {}) as Record<string, unknown>;
+  const baseInput = (base.input as Record<string, unknown>) ?? {};
   const p = patch as Record<string, unknown>;
+  const patchInput = (p.input as Record<string, unknown>) ?? p;
   return {
     ...base,
+    type: base.type,
     input: {
-      ...((base.input as Record<string, unknown>) ?? {}),
-      ...((p.input as Record<string, unknown>) ?? p),
+      ...baseInput,
+      ...patchInput,
+      eventId: baseInput.eventId,
     },
   };
+}
+
+/**
+ * The event a proposal names must belong to the organisation that owns the
+ * proposal. Belt to applyPatch's braces: if a future tool ever grows a second
+ * way to choose its target, this still refuses.
+ */
+async function assertEventInOrg(
+  tx: Tx,
+  eventId: string,
+  organisationId: string,
+): Promise<void> {
+  const event = await tx.event.findFirst({
+    where: { id: eventId, organisationId },
+    select: { id: true },
+  });
+  if (!event) {
+    throw new Error("Event does not belong to this organisation.");
+  }
 }
 
 type Tx = Parameters<Parameters<Db["$transaction"]>[0]>[0];

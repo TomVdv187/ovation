@@ -129,8 +129,13 @@ export const agentRouter = router({
     .query(async ({ ctx, input }) => {
       const organisationId = ctx.session.user.organisationId!;
       const [messages, openProposals] = await Promise.all([
+        // Agent 7 · CRITIC, Phase 3: was `where: { eventId }` with no tenant
+        // filter, so any signed-in user of any organisation could read the full
+        // agent transcript of any event by id — including whatever the
+        // organiser typed into the chat. Reproduction: check A9 in
+        // apps/console/scripts/critic-approval.ts.
         ctx.db.chatMessage.findMany({
-          where: { eventId: input.eventId },
+          where: { eventId: input.eventId, event: { organisationId } },
           orderBy: { createdAt: "desc" },
           take: input.limit,
         }),
