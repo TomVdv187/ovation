@@ -23,25 +23,36 @@ git branch -D feat/conductor feat/maison feat/oracle feat/treasury feat/maitre-d
 
 ## Before you start
 
-**Set `DATABASE_URL`.** Every agent needs a live database — ORACLE and
-TREASURY cannot reach their Definition of Done without one, since their targets
-are stated in terms of seed data. Each worktree needs its own `.env` (it is
-gitignored, so it does not travel with the branch).
+**Every worktree needs its own `.env`.** It is gitignored, so it does not
+travel with the branch — copy the root one across after creating each worktree.
 
-**Give each worktree its own database**, or the five agents will fight over the
-same rows. On Neon/Supabase, a separate branch or schema per agent is cheapest:
+**Give each agent its own Neon branch**, or the five will fight over the same
+rows. The database is Neon (provisioned through the Vercel Marketplace as
+`neon-emerald-sail`), and a Neon branch is a copy-on-write fork that takes
+seconds and costs nothing at this size:
 
-```bash
-DATABASE_URL="postgresql://.../ovation?schema=conductor"
-```
+1. Neon Console → Branches → **New branch** from `main`, named per agent
+   (`conductor`, `maison`, `oracle`, `treasury`, `maitre-d`).
+2. Copy that branch's pooled and unpooled connection strings into the
+   worktree's `.env` as `DATABASE_URL` and `DIRECT_URL`.
+
+Because the branch forks the already-seeded `main`, each agent starts with the
+exact same 200 guests and €28,140 of tickets — and can trash them freely.
 
 Then in each worktree:
 
 ```bash
 pnpm install
-pnpm db:push
+pnpm db:push        # only if you branched from an empty database
 pnpm db:seed
 ```
+
+**Note the connection path.** Prisma talks to Neon through the serverless
+driver adapter on **:443**, not TCP :5432 — this network blocks 5432 outbound.
+`pnpm db:push` applies DDL over HTTPS too. If an agent reports
+"Can't reach database server at …:5432", it has bypassed
+`@ovation/core/db` and constructed its own `PrismaClient`. That is the bug;
+point it at the shared client.
 
 ---
 

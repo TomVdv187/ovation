@@ -14,7 +14,7 @@ in parallel.
 
 ```bash
 pnpm install
-cp .env.example .env          # fill in DATABASE_URL at minimum
+cp .env.example .env          # fill in DATABASE_URL and DIRECT_URL
 pnpm db:push                  # create the schema
 pnpm db:seed                  # Meridian Summit 2026, 200 guests
 pnpm dev                      # console on :3000, events on :3001, live on :3002
@@ -31,9 +31,38 @@ Other useful commands:
 | `pnpm typecheck` | strict `tsc` across every workspace |
 | `pnpm build` | production build of all apps |
 | `pnpm db:studio` | Prisma Studio against your database |
-| `pnpm db:reset` | drop, re-push and re-seed |
+| `pnpm db:reset` | drop the schema, re-push and re-seed |
+| `pnpm db:push:tcp` | plain `prisma db push` (see below) |
 
 **Requirements:** Node ≥ 20.11, pnpm 10, a PostgreSQL database.
+
+### One `.env`, at the repo root
+
+There is a single `.env` at the repo root and it is the source of truth.
+Neither Prisma nor Next.js looks outside its own package for one, so the `dev`
+and `db:*` scripts load it explicitly via `dotenv-cli`. Add a new variable once,
+at the root — do not scatter per-package `.env` files.
+
+`build` and `start` deliberately do **not** load it: on Vercel and in CI the
+platform injects the environment.
+
+### Talking to Neon over HTTPS
+
+Against a Neon database the Prisma client goes through the serverless driver
+adapter (`@prisma/adapter-neon`), which speaks Postgres over WebSocket on
+**:443** instead of raw TCP on :5432. That is the right shape for serverless —
+no pool exhaustion when Vercel runs a function per request — and it also means
+the repo works on networks that block 5432 outbound, which many corporate ones
+do.
+
+`pnpm db:push` follows the same path: it generates the DDL locally with
+`prisma migrate diff` (no connection needed) and applies it over HTTPS. It
+refuses to touch a non-empty schema unless you pass `--force`, which drops and
+recreates `public`.
+
+Anything that is not a Neon URL — local Postgres, CI, a container — falls
+through to the plain TCP client and `pnpm db:push:tcp`. Nothing here forces a
+hosted database on you.
 
 ---
 

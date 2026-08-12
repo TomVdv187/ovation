@@ -21,10 +21,11 @@ pnpm db:push && pnpm db:seed          # once
 pnpm --filter @ovation/live dev       # http://localhost:3002
 ```
 
-`.env` lives at the workspace root. Next only reads `.env` from the *app*
-directory, so `next.config.ts` loads the root file itself — without that the
-door starts with no `QR_SIGNING_SECRET`, falls back to a development secret and
-refuses every genuine pass. Anything already set in the shell wins.
+`.env` lives at the workspace root, and Next only reads `.env` from the *app*
+directory — which is why `dev` and `start` go through `dotenv -e ../../.env`.
+Without that the door starts with no `QR_SIGNING_SECRET`, silently falls back
+to a development secret, and refuses every genuine pass. The simulation and
+verification scripts load the root file themselves for the same reason.
 
 ## Proving it works
 

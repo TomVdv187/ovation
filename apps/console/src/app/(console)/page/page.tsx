@@ -1,0 +1,14 @@
+import { EventPageView } from "~/components/views/stub-views";
+import { requireConsoleEvent } from "~/server/current-event";
+
+export const dynamic = "force-dynamic";
+
+export default async function EventPagePage() {
+  const { event } = await requireConsoleEvent();
+  if (!event) return null;
+  return (
+    <div className="px-6 py-6">
+      <EventPageView slug={event.slug} />
+    </div>
+  );
+}

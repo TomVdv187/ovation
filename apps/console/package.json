@@ -3,17 +3,21 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --port 3000",
+    "dev": "dotenv -e ../../.env -- next dev --port 3000",
     "build": "next build",
     "start": "next start --port 3000",
     "typecheck": "tsc --noEmit",
+    "verify:dod": "dotenv -e ../../.env -- node --conditions=react-server --import tsx scripts/verify-dod.ts",
     "lint": "next lint",
     "clean": "rimraf .next .turbo *.tsbuildinfo"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
     "@auth/prisma-adapter": "^2.7.4",
+    "@neondatabase/serverless": "^0.10.4",
     "@ovation/core": "workspace:*",
+    "@prisma/adapter-neon": "^6.19.3",
+    "@prisma/client": "^6.2.1",
     "@tanstack/react-query": "^5.62.11",
     "@trpc/client": "^11.0.0",
     "@trpc/react-query": "^11.0.0",
@@ -23,7 +27,8 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "superjson": "^2.2.2",
-    "zod": "^3.24.1"
+    "zod": "^3.24.1",
+    "server-only": "^0.0.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
@@ -33,6 +38,7 @@
     "postcss": "^8.4.49",
     "rimraf": "^6.0.1",
     "tailwindcss": "^3.4.17",
+    "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }
 }
