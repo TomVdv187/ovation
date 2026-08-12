@@ -1,0 +1,35 @@
+
+C · the eleven outcomes, verified independently
+  PASS  C1 valid token — CHECKED_IN
+  PASS  C2 same guest again — ALREADY_CHECKED_IN
+  PASS  C3 forged signature — REJECTED_INVALID_TOKEN
+  PASS  C4 expired token — REJECTED_EXPIRED
+  PASS  C5 wrong event — REJECTED_WRONG_EVENT
+  PASS  C6 unknown guest — REJECTED_UNKNOWN_GUEST
+  PASS  C7 empty token — REJECTED_INVALID_TOKEN
+  PASS  C8 garbage — REJECTED_INVALID_TOKEN
+  PASS  C9 manual door-list entry — CHECKED_IN
+  PASS  C10 manual cross-event — REJECTED_WRONG_EVENT
+  PASS  C11 nothing to scan — REJECTED_INVALID_TOKEN
+
+D · cases MAÎTRE D' did not try
+  PASS  D1 alg=none — REJECTED_INVALID_TOKEN
+  PASS  D2 signature stripped — REJECTED_INVALID_TOKEN
+  PASS  D3 payload tampered, signature kept — REJECTED_INVALID_TOKEN
+  PASS  D4 no exp claim refused — REJECTED_INVALID_TOKEN
+  PASS  D5 expired AND forged reads INVALID — REJECTED_INVALID_TOKEN
+  PASS  D6 forged immortal token — REJECTED_INVALID_TOKEN
+  PASS  D7 guest deleted after issue — REJECTED_UNKNOWN_GUEST
+  PASS  D8 64 KB token — REJECTED_INVALID_TOKEN
+  PASS  D9 control characters — REJECTED_INVALID_TOKEN
+  PASS  D10 SQL in guestId — REJECTED_UNKNOWN_GUEST
+  PASS  D11 padded valid token — CHECKED_IN
+
+E · idempotency (CC-006)
+      created=50 already=0 threw=0 rows=1
+  PASS  E1 50 concurrent replays of one key -> one row — created=50 already=0
+  PASS  E2 idempotency key persisted
+  PASS  E3 cold replay returns the ORIGINAL arrival time
+  PASS  E4 a new key for a checked-in guest still dedupes
+  PASS  E5 a colliding key does not refuse a genuine guest
+  PASS  E6 the collided key still dedupes for its own guest

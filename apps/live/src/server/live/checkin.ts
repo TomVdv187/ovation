@@ -107,12 +107,18 @@ async function execute(db: Db, input: CheckinInput): Promise<CheckinOutput> {
   // CC-006. A replay of a key that already landed answers from the row it
   // wrote, before anything else is attempted — this is the check that survives
   // a restart, where the in-flight map does not.
-  const replayed = await db.checkIn.findUnique({
+  //
+  // The guestId in the WHERE is load-bearing. An idempotency key identifies a
+  // SCAN, not a person, and it is generated client-side, so two devices can
+  // collide on one. Matching on the key alone made the second guest read as
+  // ALREADY_CHECKED_IN at the first guest's arrival time — i.e. a device with a
+  // weak key generator could refuse entry to an arbitrary stranger. Found by
+  // check E5 in scripts/critic-door.ts.
+  const replayed = await db.checkIn.findFirst({
     where: {
-      eventId_idempotencyKey: {
-        eventId: input.eventId,
-        idempotencyKey: input.idempotencyKey,
-      },
+      eventId: input.eventId,
+      idempotencyKey: input.idempotencyKey,
+      guestId: guest.id,
     },
     select: { timestamp: true, lane: true },
   });
@@ -124,6 +130,20 @@ async function execute(db: Db, input: CheckinInput): Promise<CheckinOutput> {
       lane: replayed.lane,
     };
   }
+
+  /**
+   * If the key is already spoken for by SOMEONE ELSE, this scan still has to
+   * succeed — a genuine guest at the door must never be turned away because
+   * another device picked the same random string. The stored key is namespaced
+   * so the unique index still holds, and replay dedupe for THIS guest still
+   * works because the lookup above and the write below derive the same value.
+   */
+  const storedKey = (await db.checkIn.findFirst({
+    where: { eventId: input.eventId, idempotencyKey: input.idempotencyKey },
+    select: { id: true },
+  }))
+    ? `${input.idempotencyKey}#${guest.id}`
+    : input.idempotencyKey;
 
   if (guest.checkIn) {
     return {
@@ -146,7 +166,7 @@ async function execute(db: Db, input: CheckinInput): Promise<CheckinOutput> {
           lane: input.lane,
           deviceId: input.deviceId ?? null,
           offlineSynced: input.offlineSynced,
-          idempotencyKey: input.idempotencyKey,
+          idempotencyKey: storedKey,
         },
       }),
       db.guest.update({
@@ -167,12 +187,11 @@ async function execute(db: Db, input: CheckinInput): Promise<CheckinOutput> {
           where: { guestId: guest.id },
           select: { timestamp: true, lane: true },
         })) ??
-        (await db.checkIn.findUnique({
+        (await db.checkIn.findFirst({
           where: {
-            eventId_idempotencyKey: {
-              eventId: input.eventId,
-              idempotencyKey: input.idempotencyKey,
-            },
+            eventId: input.eventId,
+            idempotencyKey: storedKey,
+            guestId: guest.id,
           },
           select: { timestamp: true, lane: true },
         }));
