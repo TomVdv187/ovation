@@ -1,0 +1,3 @@
+
+L · check-in latency, 250 guests, 8 lanes
+      250 simulated guests created

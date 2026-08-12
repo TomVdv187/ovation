@@ -114,14 +114,11 @@ async function execute(db: Db, input: CheckinInput): Promise<CheckinOutput> {
   // ALREADY_CHECKED_IN at the first guest's arrival time — i.e. a device with a
   // weak key generator could refuse entry to an arbitrary stranger. Found by
   // check E5 in scripts/critic-door.ts.
-  const replayed = await db.checkIn.findFirst({
-    where: {
-      eventId: input.eventId,
-      idempotencyKey: input.idempotencyKey,
-      guestId: guest.id,
-    },
-    select: { timestamp: true, lane: true },
+  const keyHolder = await db.checkIn.findFirst({
+    where: { eventId: input.eventId, idempotencyKey: input.idempotencyKey },
+    select: { guestId: true, timestamp: true, lane: true },
   });
+  const replayed = keyHolder?.guestId === guest.id ? keyHolder : null;
   if (replayed) {
     return {
       outcome: "ALREADY_CHECKED_IN",
@@ -138,10 +135,7 @@ async function execute(db: Db, input: CheckinInput): Promise<CheckinOutput> {
    * so the unique index still holds, and replay dedupe for THIS guest still
    * works because the lookup above and the write below derive the same value.
    */
-  const storedKey = (await db.checkIn.findFirst({
-    where: { eventId: input.eventId, idempotencyKey: input.idempotencyKey },
-    select: { id: true },
-  }))
+  const storedKey = keyHolder
     ? `${input.idempotencyKey}#${guest.id}`
     : input.idempotencyKey;
 
