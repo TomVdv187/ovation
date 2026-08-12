@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { Db } from "@ovation/core/db";
 import { Prisma } from "@ovation/core/db";
 import { checkinInput, checkinOutput, type LiveEvent } from "@ovation/core";
-import { emit } from "~/server/realtime";
+import { emit } from "../realtime";
 import { conversationOpener, whiteGloveNotes } from "./guest-brief";
 import { verifyQrToken } from "./qr";
 import * as metrics from "./metrics";

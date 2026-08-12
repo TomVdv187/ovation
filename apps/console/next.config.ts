@@ -3,8 +3,16 @@ import type { NextConfig } from "next";
 
 const config: NextConfig = {
   reactStrictMode: true,
-  // @ovation/core ships TypeScript source, not a build artifact.
-  transpilePackages: ["@ovation/core"],
+  // @ovation/core ships TypeScript source, not a build artifact. So do the four
+  // routers the console mounts in Phase 3 — two library packages and two
+  // sibling Next apps whose routers were written to be host-agnostic.
+  transpilePackages: [
+    "@ovation/core",
+    "@ovation/guests",
+    "@ovation/revenue",
+    "@ovation/events",
+    "@ovation/live",
+  ],
 
   // Prisma and Neon's driver must stay out of the bundle: Prisma resolves its
   // query engine relative to its own directory, and Neon pulls in `ws` with an

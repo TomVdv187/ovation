@@ -38,6 +38,18 @@ importers:
       '@ovation/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@ovation/events':
+        specifier: workspace:*
+        version: link:../events
+      '@ovation/guests':
+        specifier: workspace:*
+        version: link:../../packages/guests
+      '@ovation/live':
+        specifier: workspace:*
+        version: link:../live
+      '@ovation/revenue':
+        specifier: workspace:*
+        version: link:../../packages/revenue
       '@prisma/adapter-neon':
         specifier: ^6.19.3
         version: 6.19.3
@@ -187,6 +199,12 @@ importers:
       '@ovation/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@ovation/guests':
+        specifier: workspace:*
+        version: link:../../packages/guests
+      '@ovation/revenue':
+        specifier: workspace:*
+        version: link:../../packages/revenue
       '@prisma/adapter-neon':
         specifier: ^6.19.3
         version: 6.19.3

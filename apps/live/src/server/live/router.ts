@@ -19,7 +19,7 @@ import {
   type LiveEvent,
   type Sponsor,
 } from "@ovation/core";
-import { parseChannel, subscribe } from "~/server/realtime";
+import { parseChannel, subscribe } from "../realtime";
 import { announce } from "./announce";
 import { performCheckin } from "./checkin";
 import { opsSnapshot } from "./ops";
@@ -203,7 +203,7 @@ export { pairKey };
  * another agent's data.
  */
 async function peerCaller(ctx: Context) {
-  const { createPeerCaller } = await import("~/server/peers");
+  const { createPeerCaller } = await import("../peers");
   return createPeerCaller(ctx);
 }
 

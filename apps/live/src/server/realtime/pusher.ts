@@ -1,5 +1,5 @@
 import type { LiveEvent } from "@ovation/core";
-import { pusherChannelName, type LiveChannel } from "~/lib/channels";
+import { pusherChannelName, type LiveChannel } from "../../lib/channels";
 
 /**
  * Cross-process fan-out over the Pusher protocol.

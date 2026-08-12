@@ -1,9 +1,9 @@
 import type { LiveEvent } from "@ovation/core";
 import * as bus from "./bus";
-import { liveChannelSchema, type LiveChannel } from "~/lib/channels";
+import { liveChannelSchema, type LiveChannel } from "../../lib/channels";
 import { publishRemote, remoteSubscriberCount } from "./pusher";
 
-export * from "~/lib/channels";
+export * from "../../lib/channels";
 export { subscribe, stats, resetRoom, type Envelope } from "./bus";
 
 const ALL_CHANNELS = liveChannelSchema.options as readonly LiveChannel[];

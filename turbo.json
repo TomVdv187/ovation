@@ -43,6 +43,20 @@
       "dependsOn": ["^build"],
       "outputs": []
     },
+    // Phase 3: the console mounts `page` and `live`, so it now has workspace
+    // dependencies on two sibling Next apps. It consumes their TypeScript
+    // SOURCE through transpilePackages, never their .next output, so the
+    // generic `^build` would make every console typecheck wait on two full
+    // Next builds for nothing (9 tasks -> 11, 8s -> 2m30). The only build
+    // artifact the console genuinely needs is the generated Prisma client.
+    "@ovation/console#typecheck": {
+      "dependsOn": ["@ovation/core#build"],
+      "outputs": []
+    },
+    "@ovation/console#build": {
+      "dependsOn": ["@ovation/core#build"],
+      "outputs": [".next/**", "!.next/cache/**"]
+    },
     "lint": {
       "outputs": []
     },

@@ -1,5 +1,5 @@
 import type { LiveEvent } from "@ovation/core";
-import type { LiveChannel } from "~/lib/channels";
+import type { LiveChannel } from "../../lib/channels";
 
 /**
  * The in-process fan-out.

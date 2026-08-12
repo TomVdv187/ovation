@@ -7,7 +7,7 @@ import {
   type AgentToolName,
   type Cue,
 } from "@ovation/core";
-import { emit } from "~/server/realtime";
+import { emit } from "../realtime";
 
 /**
  * THE CUE ENGINE.
