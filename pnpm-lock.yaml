@@ -307,6 +307,18 @@ importers:
       '@ovation/core':
         specifier: workspace:*
         version: link:../packages/core
+      '@ovation/events':
+        specifier: workspace:*
+        version: link:../apps/events
+      '@ovation/guests':
+        specifier: workspace:*
+        version: link:../packages/guests
+      '@ovation/live':
+        specifier: workspace:*
+        version: link:../apps/live
+      '@ovation/revenue':
+        specifier: workspace:*
+        version: link:../packages/revenue
       '@playwright/test':
         specifier: ^1.49.1
         version: 1.62.1
