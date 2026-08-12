@@ -65,6 +65,13 @@
       "dependsOn": ["@ovation/core#build"],
       "outputs": []
     },
+    // Same reasoning for the e2e suite: it imports server modules from the
+    // three apps as TypeScript source and drives them in-process, so it needs
+    // the generated Prisma client and nothing else built.
+    "@ovation/e2e#typecheck": {
+      "dependsOn": ["@ovation/core#build"],
+      "outputs": []
+    },
     "@ovation/console#build": {
       "dependsOn": ["@ovation/core#build"],
       "outputs": [".next/**", "!.next/cache/**"]
