@@ -6,7 +6,6 @@ import {
   type ActionRiskT,
   type AgentActionStatusT,
   type JsonValue,
-  type SideEffect,
 } from "@ovation/core";
 import type { Db } from "@ovation/core/db";
 import { parsePayload } from "./actions";
@@ -118,11 +117,8 @@ async function executeOne(
       }
 
       const payload = parsePayload(applyPatch(row.payload, patch));
-      const sideEffects = Array.isArray(row.sideEffects)
-        ? (row.sideEffects as unknown as SideEffect[])
-        : [];
 
-      const mutationResult = await performMutation(tx, payload, sideEffects);
+      const mutationResult = await performMutation(tx, payload);
 
       await tx.agentAction.update({
         where: { id: actionId },
@@ -174,7 +170,6 @@ type Tx = Parameters<Parameters<Db["$transaction"]>[0]>[0];
 async function performMutation(
   tx: Tx,
   payload: AgentActionPayload,
-  sideEffects: SideEffect[],
 ): Promise<JsonValue> {
   switch (payload.type) {
     case "update_event_theme": {
@@ -228,7 +223,7 @@ async function performMutation(
     }
 
     case "draft_emails": {
-      const { eventId, guestIds, intent, brief } = payload.input;
+      const { eventId, guestIds, intent, brief, draft } = payload.input;
       const guests = await tx.guest.findMany({
         where: { id: { in: guestIds }, eventId },
         select: { id: true, name: true, email: true },
@@ -241,7 +236,6 @@ async function performMutation(
         select: { title: true, date: true, venue: true },
       });
 
-      const draft = readDraftCopy(sideEffects);
       const campaignId = `cmp_${Date.now().toString(36)}`;
 
       await tx.emailMessage.createMany({
@@ -249,15 +243,15 @@ async function performMutation(
           eventId,
           guestId: g.id,
           kind: EMAIL_KIND_BY_INTENT[intent],
-          subject: (draft.subject ?? fallbackSubject(intent, event?.title)).slice(0, 200),
-          body: renderBody(draft.body ?? brief ?? "", {
+          subject: (draft?.subject ?? fallbackSubject(intent, event?.title)).slice(0, 200),
+          body: renderBody(draft?.body ?? brief ?? "", {
             name: g.name,
             title: event?.title ?? "",
             venue: event?.venue ?? "",
             date: event?.date ?? null,
             intent,
           }),
-          personalised: Boolean(draft.body),
+          personalised: Boolean(draft?.body),
           // APPROVED, never SENT. Approving a draft_emails proposal marks the
           // copy ready to go out; the agent does not send it.
           status: "APPROVED" as const,
@@ -301,7 +295,7 @@ async function performMutation(
     }
 
     case "draft_sponsor_offer": {
-      const { eventId, sponsorId, targetPackage, incrementalAmountCents } =
+      const { eventId, sponsorId, targetPackage, incrementalAmountCents, draft } =
         payload.input;
       const sponsor = await tx.sponsor.findFirst({
         where: { id: sponsorId, eventId },
@@ -309,7 +303,6 @@ async function performMutation(
       });
       if (!sponsor) throw new Error("Sponsor not found on this event.");
 
-      const draft = readDraftCopy(sideEffects);
       await tx.sponsor.update({
         where: { id: sponsor.id },
         data: { status: "OFFERED" },
@@ -321,12 +314,12 @@ async function performMutation(
           sponsorId: sponsor.id,
           kind: "SPONSOR_OFFER",
           subject:
-            draft.subject ??
+            draft?.subject ??
             `${sponsor.name} — ${targetPackage} partnership for the next edition`,
           body:
-            draft.body ??
+            draft?.body ??
             `Hello ${sponsor.name},\n\nWe would like to offer you a ${targetPackage} package for an additional ${(incrementalAmountCents / 100).toFixed(0)} EUR.`,
-          personalised: Boolean(draft.body),
+          personalised: Boolean(draft?.body),
           // APPROVED, never SENT.
           status: "APPROVED",
         },
@@ -349,22 +342,6 @@ const EMAIL_KIND_BY_INTENT = {
   VIP_UPGRADE: "ANNOUNCEMENT",
   WAITLIST_PROMOTION: "ANNOUNCEMENT",
 } as const;
-
-/**
- * The copy the organiser actually saw on the proposal card. Using it verbatim
- * is the point: approve means "send this", not "send something like this".
- */
-function readDraftCopy(sideEffects: SideEffect[]): {
-  subject?: string;
-  body?: string;
-} {
-  const subject = sideEffects.find((s) => s.label === "Subject line")?.detail;
-  const body = sideEffects.find((s) => s.label === "Draft copy")?.detail;
-  return {
-    subject: subject ?? undefined,
-    body: body ?? undefined,
-  };
-}
 
 function fallbackSubject(intent: string, title?: string): string {
   const name = title ?? "your event";

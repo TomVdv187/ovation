@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { ActionRiskT, AgentAction, SideEffect } from "@ovation/core";
+import { draftCopySchema, type ActionRiskT, type AgentAction, type DraftCopy, type SideEffect } from "@ovation/core";
 
 /**
  * The trust surface.
@@ -53,6 +53,7 @@ export function ProposalCard({
   const [expanded, setExpanded] = useState(false);
   const risk = RISK[action.risk];
   const sideEffects = action.sideEffects as SideEffect[];
+  const draft = readDraft(action.payload);
   const open = action.status === "PROPOSED";
 
   return (
@@ -112,6 +113,18 @@ export function ProposalCard({
           )}
         </ul>
 
+        {draft && (
+          <section className="mt-4 rounded border border-line bg-surface-sunken p-3">
+            <p className="text-[11px] uppercase tracking-widest text-ink-subtle">
+              The message that will go out
+            </p>
+            <p className="mt-2 text-sm font-medium text-ink">{draft.subject}</p>
+            <p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-ink-muted">
+              {draft.body}
+            </p>
+          </section>
+        )}
+
         <p className="mt-3 text-xs text-ink-subtle">{risk.note}</p>
 
         <button
@@ -155,6 +168,20 @@ export function ProposalCard({
       </div>
     </article>
   );
+}
+
+/**
+ * CC-001. The exact copy being approved, read straight off the payload that
+ * `agent.approve` will execute. Not a preview of it, not a truncation of it —
+ * the same bytes. Before CC-001 this arrived as two synthetic side effects with
+ * the body cut at 400 characters.
+ */
+function readDraft(payload: unknown): DraftCopy | null {
+  if (!payload || typeof payload !== "object") return null;
+  const input = (payload as { input?: unknown }).input;
+  if (!input || typeof input !== "object") return null;
+  const parsed = draftCopySchema.safeParse((input as { draft?: unknown }).draft);
+  return parsed.success ? parsed.data : null;
 }
 
 function DecidedBadge({ action }: { action: AgentAction }) {

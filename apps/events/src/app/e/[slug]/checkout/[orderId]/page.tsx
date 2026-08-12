@@ -24,13 +24,10 @@ export const metadata: Metadata = {
  */
 export default async function LocalCheckoutPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ slug: string; orderId: string }>;
-  searchParams: Promise<{ n?: string }>;
 }) {
   const { slug, orderId } = await params;
-  const { n } = await searchParams;
 
   if (paymentsEnabled()) redirect(`/e/${slug}/order/${orderId}`);
 
@@ -69,7 +66,6 @@ export default async function LocalCheckoutPage({
           <form action={confirmLocalPayment}>
             <input type="hidden" name="slug" value={slug} />
             <input type="hidden" name="orderId" value={orderId} />
-            <input type="hidden" name="buyerName" value={n ?? ""} />
             <button type="submit" className="ev-button">
               Pay {formatMoney(order.amountCents, order.currency)}
             </button>

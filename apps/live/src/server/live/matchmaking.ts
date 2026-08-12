@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import type { Guest, matchmakingOutput, Sponsor } from "@ovation/core";
+import type { Db } from "@ovation/core/db";
 
 export type MatchmakingOutput = z.infer<typeof matchmakingOutput>;
 export type Match = MatchmakingOutput["matches"][number];
@@ -180,29 +181,48 @@ function clamp01(n: number): number {
 // ── introduction tracking ─────────────────────────────────────
 
 /**
- * There is no Introduction table in the schema (CONTRACT_CHANGES CC-002), and
- * writing this onto another agent's Guest.notes column would be worse than
- * keeping it in memory. Scoped per process, which covers one night's ops on
- * one box; it does not survive a restart, and the host UI says so.
+ * CC-007 accepted: there is an `Introduction` table now, so this is persistent.
+ * The in-process `Map<eventId, Set<pairKey>>` that stood in for it is gone — it
+ * lost every introduction on a phone reload and could not stop a second host
+ * being offered one the first had already made.
+ *
+ * The row is written with the pair already ordered by `pairKey`, so
+ * `@@unique([eventId, guestId, withGuestId])` genuinely means "this pair, once"
+ * rather than "this pair in this direction, once".
  */
-const globalForIntros = globalThis as unknown as {
-  ovationIntroductions?: Map<string, Set<string>>;
-};
-const intros = (globalForIntros.ovationIntroductions ??= new Map());
-
-export function markIntroduced(
+export async function markIntroduced(
+  db: Db,
   eventId: string,
   a: string,
   b: string,
-): void {
-  let set = intros.get(eventId);
-  if (!set) {
-    set = new Set();
-    intros.set(eventId, set);
-  }
-  set.add(pairKey(a, b));
+  introducedBy?: string | null,
+): Promise<void> {
+  const [first, second] = pairKey(a, b).split("|") as [string, string];
+  await db.introduction.upsert({
+    where: {
+      eventId_guestId_withGuestId: {
+        eventId,
+        guestId: first,
+        withGuestId: second,
+      },
+    },
+    create: {
+      eventId,
+      guestId: first,
+      withGuestId: second,
+      introducedBy: introducedBy ?? null,
+    },
+    update: {},
+  });
 }
 
-export function introductionsFor(eventId: string): ReadonlySet<string> {
-  return intros.get(eventId) ?? new Set<string>();
+export async function introductionsFor(
+  db: Db,
+  eventId: string,
+): Promise<ReadonlySet<string>> {
+  const rows = await db.introduction.findMany({
+    where: { eventId },
+    select: { guestId: true, withGuestId: true },
+  });
+  return new Set(rows.map((r) => pairKey(r.guestId, r.withGuestId)));
 }

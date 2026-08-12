@@ -41,11 +41,16 @@ export function isMutatingTool(name: string): name is MutatingToolName {
   return (MUTATING_TOOLS as readonly string[]).includes(name);
 }
 
-/** Extra keys the model may send for presentation. Never enter the payload. */
+/**
+ * Extra keys the model may send for presentation. Never enter the payload.
+ *
+ * CC-001 removed `subject` and `body` from here. The drafted copy is contract
+ * data now (`draftEmailsInput.draft` / `draftSponsorOfferInput.draft`), not
+ * presentation metadata, and it goes through buildPayload like every other
+ * field the model supplies.
+ */
 export interface ProposalMeta {
   summary?: string;
-  subject?: string;
-  body?: string;
 }
 
 const dateFmt = new Intl.DateTimeFormat("en-GB", {
@@ -101,12 +106,37 @@ export function buildPayload(
     case "change_event_date":
       return { type: tool, input: changeEventDateInput.parse(input) };
     case "draft_emails":
-      return { type: tool, input: draftEmailsInput.parse(input) };
+      return {
+        type: tool,
+        input: draftEmailsInput.parse({ ...input, draft: readDraft(flat) }),
+      };
     case "create_ticket_tier":
       return { type: tool, input: createTicketTierInput.parse(input) };
     case "draft_sponsor_offer":
-      return { type: tool, input: draftSponsorOfferInput.parse(input) };
+      return {
+        type: tool,
+        input: draftSponsorOfferInput.parse({
+          ...input,
+          draft: readDraft(flat),
+        }),
+      };
   }
+}
+
+/**
+ * CC-001. The tool schema stays flat (`subject`, `body`) because a flat shape
+ * is easier for a model to fill in; the contract nests it under `draft`.
+ *
+ * A subject with no body, or a body with no subject, is not a draft — the whole
+ * point is that the organiser approves the exact message, and half a message is
+ * not one. Returning undefined lets `execute.ts` fall back to its template.
+ */
+function readDraft(flat: Record<string, unknown>): unknown {
+  if (flat.draft && typeof flat.draft === "object") return flat.draft;
+  const subject = typeof flat.subject === "string" ? flat.subject.trim() : "";
+  const body = typeof flat.body === "string" ? flat.body.trim() : "";
+  if (!subject || !body) return undefined;
+  return { subject: subject.slice(0, 200), body };
 }
 
 function dropUndefined(
@@ -149,7 +179,6 @@ export function defaultSummary(payload: AgentActionPayload): string {
 export async function buildSideEffects(
   db: Db,
   payload: AgentActionPayload,
-  meta: ProposalMeta = {},
 ): Promise<SideEffect[]> {
   const eventId = payload.input.eventId;
 
@@ -234,16 +263,10 @@ export async function buildSideEffects(
           count: null,
         },
       ];
-      if (meta.subject) {
-        effects.push({ label: "Subject line", detail: meta.subject, count: null });
-      }
-      if (meta.body) {
-        effects.push({
-          label: "Draft copy",
-          detail: meta.body.slice(0, 400),
-          count: null,
-        });
-      }
+      // CC-001: the copy lives on the payload now. The card renders
+      // `payload.input.draft` verbatim and in full — it used to be smuggled
+      // through two synthetic side effects, which truncated the body at 400
+      // characters, so the organiser approved words they had not been shown.
       return effects;
     }
 
@@ -317,7 +340,7 @@ export async function proposeAction(
 ): Promise<AgentAction> {
   const payload = buildPayload(args.tool, args.rawInput, args.eventId);
   const meta = args.meta ?? {};
-  const sideEffects = await buildSideEffects(db, payload, meta);
+  const sideEffects = await buildSideEffects(db, payload);
 
   const row = await db.agentAction.create({
     data: {

@@ -47,10 +47,16 @@ export const revenueRouter = router({
       throw notImplemented("revenue.sponsors", OWNER);
     }),
 
+  /**
+   * CC-004: a mutation, not a query. The output carries an `agentActionId`, so
+   * the procedure has to persist the drafted copy on an AgentAction before it
+   * can answer — it writes. It is also the one place that calls the Anthropic
+   * API, and a query may be prefetched and served over a cacheable GET.
+   */
   sponsorUpsellCandidates: orgProcedure
     .input(sponsorUpsellCandidatesInput)
     .output(sponsorUpsellCandidatesOutput)
-    .query(() => {
+    .mutation(() => {
       throw notImplemented("revenue.sponsorUpsellCandidates", OWNER);
     }),
 

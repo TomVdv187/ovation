@@ -55,9 +55,11 @@ type GuestRow = Prisma.GuestGetPayload<{ select: typeof GUEST_SELECT }>;
  * or a queue that retries before the first reply lands, resolve to one write
  * rather than racing on the unique index.
  *
- * This is a per-process optimisation, not the correctness mechanism — the
- * unique constraint is. See CONTRACT_CHANGES CC-001 for the persisted
- * idempotency key that would make dedupe survive a restart.
+ * This is a per-process optimisation, not the correctness mechanism. CC-006
+ * accepted, so the correctness mechanism is now @@unique([eventId,
+ * idempotencyKey]) on CheckIn — dedupe by SCAN, which survives a restart and
+ * works across app instances. CheckIn.guestId @unique still dedupes by GUEST
+ * and is what catches two different scans of the same person.
  */
 const globalForInflight = globalThis as unknown as {
   ovationCheckinInflight?: Map<string, Promise<CheckinOutput>>;
@@ -102,6 +104,27 @@ async function execute(db: Db, input: CheckinInput): Promise<CheckinOutput> {
   // typed against the wrong event, are the same mistake with the same answer.
   if (guest.eventId !== input.eventId) return rejection("REJECTED_WRONG_EVENT");
 
+  // CC-006. A replay of a key that already landed answers from the row it
+  // wrote, before anything else is attempted — this is the check that survives
+  // a restart, where the in-flight map does not.
+  const replayed = await db.checkIn.findUnique({
+    where: {
+      eventId_idempotencyKey: {
+        eventId: input.eventId,
+        idempotencyKey: input.idempotencyKey,
+      },
+    },
+    select: { timestamp: true, lane: true },
+  });
+  if (replayed) {
+    return {
+      outcome: "ALREADY_CHECKED_IN",
+      guest: brief(guest),
+      checkedInAt: replayed.timestamp,
+      lane: replayed.lane,
+    };
+  }
+
   if (guest.checkIn) {
     return {
       outcome: "ALREADY_CHECKED_IN",
@@ -123,6 +146,7 @@ async function execute(db: Db, input: CheckinInput): Promise<CheckinOutput> {
           lane: input.lane,
           deviceId: input.deviceId ?? null,
           offlineSynced: input.offlineSynced,
+          idempotencyKey: input.idempotencyKey,
         },
       }),
       db.guest.update({
@@ -135,12 +159,23 @@ async function execute(db: Db, input: CheckinInput): Promise<CheckinOutput> {
       err instanceof Prisma.PrismaClientKnownRequestError &&
       err.code === "P2002"
     ) {
-      // Lost the race against another lane or a replay that arrived first.
-      // Read back the winner so the greeter sees the real arrival time.
-      const winner = await db.checkIn.findUnique({
-        where: { guestId: guest.id },
-        select: { timestamp: true, lane: true },
-      });
+      // Lost the race against another lane or a replay that arrived first —
+      // on either unique index. Read back the winner so the greeter sees the
+      // real arrival time.
+      const winner =
+        (await db.checkIn.findUnique({
+          where: { guestId: guest.id },
+          select: { timestamp: true, lane: true },
+        })) ??
+        (await db.checkIn.findUnique({
+          where: {
+            eventId_idempotencyKey: {
+              eventId: input.eventId,
+              idempotencyKey: input.idempotencyKey,
+            },
+          },
+          select: { timestamp: true, lane: true },
+        }));
       return {
         outcome: "ALREADY_CHECKED_IN",
         guest: brief(guest),

@@ -221,11 +221,40 @@ export const pageRenderInput = z.object({
   preview: z.boolean().default(false),
 });
 
+/**
+ * CC-003, amended. What is on sale, as the public may see it.
+ *
+ * The request asked for `tiers: ticketTierSchema[]`. That was rejected as
+ * written: `page.render` is a publicProcedure, and `ticketTierSchema` carries
+ * `quota` and `sold`, so it would publish this event's sell-through to anyone
+ * who can load the page. `remaining` is the fact a buyer needs; `sold` is a
+ * fact a competitor wants. The availability rules that used to live in
+ * apps/events (`tierAvailability`) move into the contract here instead, which
+ * is what the request was actually asking for.
+ */
+export const publicTicketTierSchema = z.object({
+  id: idSchema,
+  name: z.string(),
+  description: z.string().nullable(),
+  priceCents: centsSchema,
+  currency: currencySchema,
+  /** Seats left in this tier. Never negative. */
+  remaining: z.number().int().nonnegative(),
+  /** On sale, inside its window, and with seats left. */
+  purchasable: z.boolean(),
+  soldOut: z.boolean(),
+  opensAt: z.coerce.date().nullable(),
+  closesAt: z.coerce.date().nullable(),
+});
+export type PublicTicketTier = z.infer<typeof publicTicketTierSchema>;
+
 export const pageRenderOutput = z.object({
   event: eventSchema,
   theme: eventThemeSchema,
   sections: z.array(pageSectionSchema),
   ticketTiersAvailable: z.boolean(),
+  /** CC-003. Every tier on the event, in sort order — not only the buyable ones. */
+  tiers: z.array(publicTicketTierSchema),
 });
 export type PageRender = z.infer<typeof pageRenderOutput>;
 

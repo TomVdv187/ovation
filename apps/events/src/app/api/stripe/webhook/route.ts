@@ -64,7 +64,6 @@ export async function POST(request: Request): Promise<Response> {
               typeof session.payment_intent === "string"
                 ? session.payment_intent
                 : (session.payment_intent?.id ?? null),
-            buyerName: session.metadata?.buyerName ?? null,
           });
         }
         break;

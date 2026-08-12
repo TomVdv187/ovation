@@ -15,7 +15,7 @@
   },
   "scripts": {
     "build": "prisma generate",
-    "typecheck": "prisma generate && tsc --noEmit",
+    "typecheck": "tsc --noEmit",
     "db:generate": "prisma generate",
     "db:push": "dotenv -e ../../.env -- tsx prisma/push.ts",
     "db:push:tcp": "dotenv -e ../../.env -- prisma db push",

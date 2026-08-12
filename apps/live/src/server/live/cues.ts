@@ -33,8 +33,12 @@ import { emit } from "../realtime";
  * whatever the org settings say — a machine cannot email a VIP because a timer
  * went off.
  *
- * Cue definitions live in memory with a sane default set. There is no Cue
- * table in the schema; see CONTRACT_CHANGES CC-003.
+ * CC-008 accepted: cue definitions are rows in the `Cue` table now. The first
+ * read of an event seeds the default set, and after that an organiser who
+ * disables the capacity cue at 19:00 keeps it disabled across a deploy. The
+ * fired-once-per-night marker stays in memory on purpose — it is state about
+ * tonight, not configuration, and the persisted "is there already an open
+ * proposal for this cue" check below is what actually survives a restart.
  */
 
 const CUE_ACTION_MARKER = "ovationCue";
@@ -42,15 +46,12 @@ const CUE_ACTION_MARKER = "ovationCue";
 export const DOORS_KIND = "DOORS";
 
 interface CueState {
-  /** eventId -> cues */
-  configs: Map<string, Cue[]>;
   /** `${eventId}:${cueId}` -> when it last fired, so it fires once per night. */
   fired: Map<string, number>;
 }
 
 const globalForCues = globalThis as unknown as { ovationLiveCues?: CueState };
 const state: CueState = (globalForCues.ovationLiveCues ??= {
-  configs: new Map(),
   fired: new Map(),
 });
 
@@ -83,19 +84,72 @@ export function defaultCues(eventId: string): Cue[] {
   ];
 }
 
-export function getCues(eventId: string): Cue[] {
-  let cues = state.configs.get(eventId);
-  if (!cues) {
-    cues = defaultCues(eventId);
-    state.configs.set(eventId, cues);
-  }
-  return cues;
+/**
+ * CC-008. Rows, not a Map. The default set is seeded on first read so an event
+ * that nobody has configured still has working cues.
+ */
+export async function getCues(db: Db, eventId: string): Promise<Cue[]> {
+  const rows = await db.cue.findMany({
+    where: { eventId },
+    orderBy: { createdAt: "asc" },
+  });
+  if (rows.length > 0) return rows.map(toCue);
+
+  const defaults = defaultCues(eventId);
+  await db.cue.createMany({
+    data: defaults.map((c) => ({
+      eventId,
+      label: c.label,
+      trigger: c.trigger as unknown as object,
+      auto: c.auto,
+      enabled: c.enabled,
+    })),
+    skipDuplicates: true,
+  });
+  return (
+    await db.cue.findMany({ where: { eventId }, orderBy: { createdAt: "asc" } })
+  ).map(toCue);
 }
 
-export function setCues(eventId: string, cues: unknown): Cue[] {
+export async function setCues(
+  db: Db,
+  eventId: string,
+  cues: unknown,
+): Promise<Cue[]> {
   const parsed = z.array(cueSchema).parse(cues);
-  state.configs.set(eventId, parsed);
-  return parsed;
+  await db.$transaction([
+    db.cue.deleteMany({ where: { eventId } }),
+    db.cue.createMany({
+      data: parsed.map((c) => ({
+        eventId,
+        label: c.label,
+        trigger: c.trigger as unknown as object,
+        auto: c.auto,
+        enabled: c.enabled,
+      })),
+    }),
+  ]);
+  return (
+    await db.cue.findMany({ where: { eventId }, orderBy: { createdAt: "asc" } })
+  ).map(toCue);
+}
+
+function toCue(row: {
+  id: string;
+  eventId: string;
+  label: string;
+  trigger: unknown;
+  auto: boolean;
+  enabled: boolean;
+}): Cue {
+  return cueSchema.parse({
+    id: row.id,
+    eventId: row.eventId,
+    label: row.label,
+    trigger: row.trigger,
+    auto: row.auto,
+    enabled: row.enabled,
+  });
 }
 
 export function resetFired(eventId: string): void {
@@ -142,7 +196,7 @@ async function evaluate(
   ctx: CueContext,
   only: readonly TriggerType[],
 ): Promise<void> {
-  const cues = getCues(eventId).filter(
+  const cues = (await getCues(db, eventId)).filter(
     (c) => c.enabled && only.includes(c.trigger.type),
   );
   if (cues.length === 0) return;

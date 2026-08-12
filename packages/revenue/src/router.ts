@@ -415,7 +415,7 @@ export const revenueRouter = router({
   sponsorUpsellCandidates: orgProcedure
     .input(sponsorUpsellCandidatesInput)
     .output(sponsorUpsellCandidatesOutput)
-    .query(async ({ ctx, input }) => {
+    .mutation(async ({ ctx, input }) => {
       const orgId = organisationId(ctx);
       const event = await requireEvent(ctx.db, orgId, input.eventId);
 
