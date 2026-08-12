@@ -263,8 +263,6 @@ model Event {
   sponsors      Sponsor[]
   emails        EmailMessage[]
   checkIns      CheckIn[]
-  introductions Introduction[]
-  cues          Cue[]
   announcements Announcement[]
   agentActions  AgentAction[]
   costs         CostEntry[]
@@ -375,11 +373,7 @@ model Order {
   tierId  String
   guestId String?
 
-  email String
-  /// CC-002. The name typed at checkout. A ticket buyer is not a Guest until
-  /// the payment settles, so between startCheckout and fulfilOrder this is the
-  /// only place the name exists.
-  buyerName   String?
+  email       String
   quantity    Int         @default(1)
   amountCents Int
   currency    String      @default("EUR")
@@ -529,55 +523,12 @@ model CheckIn {
   deviceId  String?
   /// True when the scan happened offline and was replayed from the sync queue.
   offlineSynced Boolean @default(false)
-  /// CC-006. The scan's idempotency key, so replaying an offline queue is safe
-  /// across a restart and across app instances — guestId @unique dedupes by
-  /// GUEST, which is a different guarantee.
-  idempotencyKey String?
 
   event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
   guest Guest @relation(fields: [guestId], references: [id], onDelete: Cascade)
 
-  @@unique([eventId, idempotencyKey])
   @@index([eventId, timestamp])
   @@index([eventId, lane])
-}
-
-/// CC-007. A host marking two guests as introduced. Survives a phone reload,
-/// and stops a second host being offered an introduction the first already made.
-model Introduction {
-  id          String @id @default(cuid())
-  eventId     String
-  guestId     String
-  withGuestId String
-
-  /// User id of the host who marked it, when known.
-  introducedBy String?
-  createdAt    DateTime @default(now())
-
-  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
-
-  @@unique([eventId, guestId, withGuestId])
-  @@index([eventId])
-}
-
-/// CC-008. Per-event cue configuration, mirroring cueSchema in
-/// packages/core/src/schemas/live.ts. An organiser who disables the capacity
-/// cue at 19:00 keeps it disabled across a deploy.
-model Cue {
-  id      String  @id @default(cuid())
-  eventId String
-  label   String
-  /// CueTrigger — { kind, ... }. See cueTriggerSchema.
-  trigger Json
-  auto    Boolean @default(false)
-  enabled Boolean @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
-
-  @@index([eventId])
 }
 
 // ─────────────────────────────────────────────────────────────
