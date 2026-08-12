@@ -93,6 +93,7 @@ export async function startCheckout(
       amountCents: tier.priceCents * quantity,
       currency: tier.currency,
       email,
+      buyerName: name,
     });
   } catch (cause) {
     if (cause instanceof SoldOutError) {
@@ -103,7 +104,7 @@ export async function startCheckout(
 
   // A free tier has nothing to pay for: the reservation IS the ticket.
   if (tier.priceCents === 0) {
-    await fulfilOrder(orderId, { buyerName: name });
+    await fulfilOrder(orderId);
     return {
       ok: true,
       orderId,
@@ -114,12 +115,11 @@ export async function startCheckout(
   const stripe = stripeClient();
   if (!stripe) {
     // No key configured. The local checkout runs the same fulfilment path.
-    // The buyer's name rides in the URL because Order has no column for it —
-    // in the Stripe path it travels in the session metadata instead.
+    // CC-002: the name is on the Order row now, so the URL no longer carries it.
     return {
       ok: true,
       orderId,
-      redirectTo: `/e/${event.slug}/checkout/${orderId}?n=${encodeURIComponent(name)}`,
+      redirectTo: `/e/${event.slug}/checkout/${orderId}`,
     };
   }
 
@@ -129,7 +129,7 @@ export async function startCheckout(
       mode: "payment",
       customer_email: email,
       client_reference_id: orderId,
-      metadata: { orderId, eventId: event.id, tierId: tier.id, buyerName: name },
+      metadata: { orderId, eventId: event.id, tierId: tier.id },
       line_items: [
         {
           quantity,
@@ -176,6 +176,7 @@ interface ReserveInput {
   amountCents: number;
   currency: string;
   email: string;
+  buyerName: string;
 }
 
 /** Takes the seats and opens a PENDING order, or throws SoldOutError. */
@@ -204,6 +205,10 @@ async function reserve(input: ReserveInput): Promise<string> {
         eventId: input.eventId,
         tierId: input.tierId,
         email: input.email,
+        // CC-002: the name typed at checkout now has a column. It used to ride
+        // in a query parameter (local path) or Stripe session metadata (real
+        // path) and be handed back to fulfilOrder out of band.
+        buyerName: input.buyerName,
         quantity: input.quantity,
         amountCents: input.amountCents,
         currency: input.currency,
@@ -219,7 +224,6 @@ async function reserve(input: ReserveInput): Promise<string> {
 export interface FulfilInput {
   stripeSessionId?: string | null;
   stripePaymentIntentId?: string | null;
-  buyerName?: string | null;
 }
 
 export interface FulfilResult {
@@ -300,8 +304,8 @@ export async function fulfilOrder(
               source: "registration",
               registeredAt: existing.registeredAt ?? now,
               lastSeenAt: now,
-              ...(input.buyerName && !existing.name
-                ? { name: input.buyerName }
+              ...(order.buyerName && !existing.name
+                ? { name: order.buyerName }
                 : {}),
             },
             select: { id: true, name: true, plusOnes: true, dietary: true },
@@ -310,7 +314,7 @@ export async function fulfilOrder(
             data: {
               eventId: order.eventId,
               email,
-              name: input.buyerName?.trim() || email,
+              name: order.buyerName?.trim() || email,
               rsvpStatus: "CONFIRMED",
               source: "registration",
               registeredAt: now,
@@ -425,7 +429,6 @@ export async function reconcileOrder(orderId: string): Promise<void> {
           typeof session.payment_intent === "string"
             ? session.payment_intent
             : (session.payment_intent?.id ?? null),
-        buyerName: session.metadata?.buyerName ?? null,
       });
     } else if (session.status === "expired") {
       await releaseOrder(orderId, "CANCELLED");

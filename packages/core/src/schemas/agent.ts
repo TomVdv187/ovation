@@ -90,11 +90,25 @@ export const changeEventDateInput = z.object({
   reason: z.string().optional(),
 });
 
+/**
+ * CC-001. `draft` carries the words being approved.
+ *
+ * `brief` is the steer BEHIND the copy; `draft` is the copy. Approval is only
+ * meaningful if the organiser approves specific words, so the proposal card
+ * renders `payload.input.draft` and `agent.approve` sends exactly that.
+ */
+export const draftCopySchema = z.object({
+  subject: z.string().max(200),
+  body: z.string(),
+});
+export type DraftCopy = z.infer<typeof draftCopySchema>;
+
 export const draftEmailsInput = z.object({
   eventId: idSchema,
   guestIds: z.array(idSchema).min(1),
   intent: campaignIntentSchema,
   brief: z.string().max(2000).optional(),
+  draft: draftCopySchema.optional(),
 });
 
 export const createTicketTierInput = z.object({
@@ -110,6 +124,8 @@ export const draftSponsorOfferInput = z.object({
   sponsorId: idSchema,
   targetPackage: z.enum(["GOLD", "SILVER", "CUSTOM"]),
   incrementalAmountCents: centsSchema,
+  /** CC-001 — see draftCopySchema. */
+  draft: draftCopySchema.optional(),
 });
 
 export const getNoShowRisksInput = z.object({

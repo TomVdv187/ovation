@@ -206,10 +206,10 @@ async function dispatchTool(
     }
 
     const raw = (use.input ?? {}) as Record<string, unknown>;
+    // CC-001: `subject` and `body` are no longer presentation metadata. They
+    // are folded into `payload.input.draft` by buildPayload.
     const meta: ProposalMeta = {
       summary: typeof raw.summary === "string" ? raw.summary : undefined,
-      subject: typeof raw.subject === "string" ? raw.subject : undefined,
-      body: typeof raw.body === "string" ? raw.body : undefined,
     };
 
     const action = await proposeAction(db, {

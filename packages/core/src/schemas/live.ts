@@ -131,6 +131,21 @@ export const liveFeedInput = z.object({
   eventId: idSchema,
   /** Resume point so a reconnect does not lose events. */
   since: z.coerce.date().optional(),
+  /**
+   * CC-009. Which surface is listening.
+   *
+   * `announceInput.channels` addresses an announcement to a subset of clients,
+   * so a subscriber has to be able to declare which subset it belongs to —
+   * otherwise a message meant for the guest app also lands on the info screens
+   * and the delivery count in `announceOutput` is a guess. It has to be on the
+   * INPUT rather than a header because EventSource cannot set request headers.
+   *
+   * `ops` and `door` are operator surfaces and see everything; the three
+   * announceable channels keep their contract spelling exactly.
+   */
+  channel: z
+    .enum(["guest-app", "host", "screens", "ops", "door"])
+    .optional(),
 });
 
 // ── live.announce ─────────────────────────────────────────────

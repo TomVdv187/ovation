@@ -13,6 +13,32 @@ and updates every consumer.
 
 ---
 
+## Phase 3 disposition (Agent 7 · CRITIC, 2026-08-12)
+
+Four agents each opened a "CC-001" because they numbered independently. The
+nine requests are renumbered below into one sequence, in the order they appear
+in this file. Old id → new id:
+
+| Requester | Old id | New id | Verdict |
+| --- | --- | --- | --- |
+| Agent 1 · CONDUCTOR | CC-001 | **CC-001** | Accepted |
+| Agent 2 · MAISON | CC-001 | **CC-002** | Accepted |
+| Agent 2 · MAISON | CC-002 | **CC-003** | Accepted with amendment |
+| Agent 4 · TREASURY | CC-001 | **CC-004** | Accepted |
+| Agent 4 · TREASURY | CC-002 | **CC-005** | Accepted, proposed fix replaced |
+| Agent 5 · MAÎTRE D' | CC-001 | **CC-006** | Accepted |
+| Agent 5 · MAÎTRE D' | CC-002 | **CC-007** | Accepted |
+| Agent 5 · MAÎTRE D' | CC-003 | **CC-008** | Accepted |
+| Agent 5 · MAÎTRE D' | CC-004 | **CC-009** | Accepted, partially applied |
+
+Four of them (CC-002, CC-006, CC-007, CC-008) needed a Prisma schema change.
+They were sequenced into **one** additive migration —
+`scripts/critic/migrate-cc.ts` — applied through `@ovation/core/db` rather than
+`db:push`, which was off-limits for this run. Reasoning per request is under
+each entry below; the wider story is in `INTEGRATION_REPORT.md`.
+
+---
+
 ## Template
 
 ```
@@ -63,7 +89,25 @@ and updates every consumer.
   `packages/guests` if the Oracle's `personaliseInvite` wants to hand finished
   copy to a `draft_emails` action rather than writing `EmailMessage` rows
   itself.
-### CC-001 · Order needs the buyer's name
+> **VERDICT — ACCEPTED (Agent 7 · CRITIC, 2026-08-12).**
+>
+> The workaround was worse than the requester admitted. `execute.ts` read the
+> body back out of the `"Draft copy"` side effect, and `actions.ts` wrote that
+> side effect as `meta.body.slice(0, 400)`. So for any draft over 400
+> characters the organiser approved one message and a *different, truncated*
+> message is what got written to `EmailMessage`. Approving specific words was
+> the entire point of the card; the workaround silently defeated it.
+>
+> Applied: `draftCopySchema` (`{ subject, body }`) in
+> `packages/core/src/schemas/agent.ts`, optional on both `draftEmailsInput` and
+> `draftSponsorOfferInput`. Consumers updated — `readDraftCopy` and the two
+> synthetic side effects are deleted, `ProposalMeta` no longer carries
+> `subject`/`body`, `buildPayload` folds the model's flat `subject`/`body` into
+> `input.draft`, and `proposal-card.tsx` renders `payload.input.draft` in full.
+> A subject without a body (or the reverse) is not a draft and is dropped, so
+> the executor falls back to its template rather than sending half a message.
+
+### CC-002 · Order needs the buyer's name
 - **Requested by:** Agent 2 · MAISON
 - **Date:** 2026-08-11
 - **What:** a `buyerName String?` column on `Order` (or an equivalent field in
@@ -81,7 +125,19 @@ and updates every consumer.
   and `apps/events/src/server/ticketing.ts`. Nobody else reads it. Agent 4 ·
   TREASURY sums `Order.amountCents` and is unaffected.
 
-### CC-002 · page.render carries no ticket tiers
+> **VERDICT — ACCEPTED (Agent 7 · CRITIC, 2026-08-12).**
+>
+> `Order.buyerName String?` added; applied in the single Phase 3 migration.
+> Both halves of the workaround are unwound: `reserve()` persists the name,
+> `fulfilOrder` reads it off the order row, `FulfilInput.buyerName` is gone,
+> the Stripe session no longer carries `metadata.buyerName`, and the local
+> checkout redirect no longer carries `?n=`.
+>
+> Worth stating: the query-parameter half was not merely inelegant. `?n=` was
+> attacker-controlled and fed straight into the created Guest's `name`, so a
+> crafted URL could name someone else's ticket buyer. That is closed now.
+
+### CC-003 · page.render carries no ticket tiers
 - **Requested by:** Agent 2 · MAISON
 - **Date:** 2026-08-11
 - **What:** `pageRenderOutput` exposes `ticketTiersAvailable: boolean` but no
@@ -99,7 +155,27 @@ and updates every consumer.
 - **Blast radius:** `packages/core/src/schemas/event.ts` (additive), plus the
   `page.render` implementation and the tickets page in `apps/events`. Additive,
   so no existing consumer breaks.
-### CC-001 · `revenue.sponsorUpsellCandidates` should be a mutation
+> **VERDICT — ACCEPTED WITH AMENDMENT (Agent 7 · CRITIC, 2026-08-12).**
+>
+> The problem is real: `/e/[slug]/tickets` queried Prisma and re-derived
+> availability with its own copy of the rules, so there were two sources of
+> truth for what was on sale.
+>
+> The proposed shape is rejected. `page.render` is a `publicProcedure` and
+> `ticketTierSchema` carries `quota` and `sold`, so shipping it would publish
+> this event's sell-through to anyone who can load the page. `remaining` is the
+> fact a buyer needs; `sold` is the fact a rival wants. Raw `TicketTierStatus`
+> is left off for the same reason.
+>
+> Applied: `publicTicketTierSchema` (id, name, description, priceCents,
+> currency, remaining, purchasable, soldOut, opensAt, closesAt) and
+> `tiers: publicTicketTierSchema[]` on `pageRenderOutput`. `tierAvailability`
+> runs once inside `page.render`, and the tickets page consumes
+> `api().page.render(...)`. One consequence, stated because it is a real
+> regression: "Closed" and "Not on sale yet" now both render as "Not on sale",
+> because the status that distinguished them is exactly what must not be public.
+
+### CC-004 · `revenue.sponsorUpsellCandidates` should be a mutation
 - **Requested by:** Agent 4 · TREASURY
 - **Date:** 2026-08-11
 - **What:** change `sponsorUpsellCandidates` from `.query()` to `.mutation()` in
@@ -119,7 +195,22 @@ and updates every consumer.
 - **Blast radius:** Agent 1 · CONSOLE, if it has already wired the call site.
   Nothing else consumes it.
 
-### CC-002 · `@ovation/core` typecheck and build race on `prisma generate`
+> **VERDICT — ACCEPTED (Agent 7 · CRITIC, 2026-08-12).**
+>
+> A procedure that must persist an `AgentAction` in order to answer is a
+> writer, and a writer is a mutation. `.query()` → `.mutation()` in both the
+> contract stub and `packages/revenue/src/router.ts`. No schema change.
+>
+> The idempotent-write workaround stays: it is good behaviour on its own terms
+> (a repeated call reuses the open PROPOSED action rather than re-drafting and
+> paying for another Anthropic call), not merely a prop for the query shape.
+>
+> Blast radius was smaller than the requester feared — the console has no call
+> site for `sponsorUpsellCandidates` at all, so no `useQuery` → `useMutation`
+> was needed anywhere. `packages/revenue/scripts/verify-seed.ts` reaches it
+> through a server-side caller, which is shape-agnostic.
+
+### CC-005 · `@ovation/core` typecheck and build race on `prisma generate`
 - **Requested by:** Agent 4 · TREASURY
 - **Date:** 2026-08-11
 - **What:** in `packages/core/package.json`, `typecheck` runs
@@ -135,7 +226,28 @@ and updates every consumer.
 - **Workaround in place:** none needed inside packages/revenue — run the root
   typecheck with `--concurrency=1`, or run it twice (the second run is cached).
 - **Blast radius:** every agent running the root typecheck on Windows.
-### CC-001 · Persist the check-in idempotency key
+> **VERDICT — ACCEPTED, BUT THE PROPOSED FIX WOULD HAVE BROKEN A COLD CHECKOUT
+> (Agent 7 · CRITIC, 2026-08-12).**
+>
+> The race is real and `prisma generate` is now gone from `@ovation/core`'s
+> `typecheck` script. The suggested remedy — "let `dependsOn: ["^build"]`
+> supply it" — does not work: `^build` means the builds of the package's
+> *dependencies*, and `@ovation/core` has no workspace dependencies. So
+> `@ovation/core#typecheck` would have run `tsc --noEmit` against an ungenerated
+> client on any checkout without a warm `node_modules/.prisma`. It would have
+> passed on the requester's machine, where the client already existed, and
+> failed in CI.
+>
+> Applied instead: an explicit `"@ovation/core#typecheck": { "dependsOn":
+> ["@ovation/core#build"] }` in `turbo.json`, which both supplies the client and
+> serialises the two generates so they cannot race.
+>
+> Separately, and not what this request describes: on this network
+> `prisma generate` fails outright with `unable to verify the first certificate`
+> when it fetches the engine checksum from `binaries.prisma.sh`. That is TLS
+> interception, not a race. See `INTEGRATION_REPORT.md`.
+
+### CC-006 · Persist the check-in idempotency key
 - **Requested by:** Agent 5 · MAÎTRE D'
 - **Date:** 2026-08-11
 - **What:** `CheckIn.idempotencyKey String? @unique` (or `@@unique([eventId, idempotencyKey])`) in `prisma/schema.prisma`.
@@ -156,7 +268,21 @@ and updates every consumer.
 - **Blast radius:** additive, nullable column. No consumer reads it; Agent 2 ·
   MAISON does not write `CheckIn`. Nothing else changes.
 
-### CC-002 · Somewhere to record an introduction
+> **VERDICT — ACCEPTED (Agent 7 · CRITIC, 2026-08-12).**
+>
+> `CheckIn.idempotencyKey String?` with `@@unique([eventId, idempotencyKey])`,
+> applied in the single Phase 3 migration. `performCheckin` now looks the key up
+> before anything else and answers `ALREADY_CHECKED_IN` from the row it wrote,
+> the create persists the key, and the `P2002` recovery reads back the winner on
+> either unique index.
+>
+> The in-process in-flight `Map` stays, correctly relabelled as an optimisation
+> rather than the correctness mechanism. The requester's analysis was accurate:
+> `CheckIn.guestId @unique` dedupes by guest, which is a different guarantee
+> from deduping by scan, and only the latter makes an offline queue replay safe
+> across a restart or a second instance.
+
+### CC-007 · Somewhere to record an introduction
 - **Requested by:** Agent 5 · MAÎTRE D'
 - **Date:** 2026-08-11
 - **What:** an `Introduction` model — `{ id, eventId, guestId, withGuestId, introducedBy String?, createdAt }`
@@ -173,7 +299,16 @@ and updates every consumer.
   `live.markIntroduced` and `live.matchmaking` read or write it, both of which
   are ours.
 
-### CC-003 · Somewhere to keep cue configuration
+> **VERDICT — ACCEPTED (Agent 7 · CRITIC, 2026-08-12).**
+>
+> `Introduction` model added as specified, applied in the single Phase 3
+> migration. The `globalThis` `Map<eventId, Set<pairKey>>` is deleted.
+> `markIntroduced` is an upsert and records `introducedBy` from the session;
+> `matchmaking` reads the pairs back from the table. Rows are written with the
+> pair already ordered by `pairKey`, so the unique constraint means "this pair,
+> once" rather than "this pair in this direction, once".
+
+### CC-008 · Somewhere to keep cue configuration
 - **Requested by:** Agent 5 · MAÎTRE D'
 - **Date:** 2026-08-11
 - **What:** a `Cue` model mirroring `cueSchema` — `{ id, eventId, label, trigger Json, auto Boolean, enabled Boolean }`.
@@ -186,7 +321,20 @@ and updates every consumer.
   (`apps/live/src/server/live/cues.ts`). Behaviour is correct; persistence is not.
 - **Blast radius:** new model. Only the live app reads it.
 
-### CC-004 · Let a feed subscriber say which channel it is
+> **VERDICT — ACCEPTED (Agent 7 · CRITIC, 2026-08-12).**
+>
+> `Cue` model added, applied in the single Phase 3 migration. `getCues` and
+> `setCues` are database-backed and seed the default set on first read of an
+> event, so an unconfigured event still has working cues. `/api/live/cues`
+> reads and writes rows.
+>
+> The fired-once-per-night marker stays in memory deliberately, and that is a
+> narrower claim than "cues are persistent": it is state about tonight, not
+> configuration. What actually stops a duplicate card after a restart is the
+> existing "is there already an open PROPOSED action for this cue" query, which
+> was already persistent.
+
+### CC-009 · Let a feed subscriber say which channel it is
 - **Requested by:** Agent 5 · MAÎTRE D'
 - **Date:** 2026-08-11
 - **What:** add `channel: z.enum(["guest-app", "host", "screens", "ops", "door"]).optional()`
@@ -204,3 +352,19 @@ and updates every consumer.
   doorways exist only because of this gap.
 - **Blast radius:** optional field on an existing input. No consumer breaks;
   once it lands, `/api/live/stream` becomes redundant and we delete it.
+
+> **VERDICT — ACCEPTED, PARTIALLY APPLIED (Agent 7 · CRITIC, 2026-08-12).**
+>
+> `channel: z.enum([...]).optional()` added to `liveFeedInput`. Both `live.feed`
+> and `live.guestFeed` prefer `input.channel` and fall back to the
+> `x-ovation-live-channel` header, so an existing server-side caller keeps
+> working. The reasoning about `EventSource` is right, and the input is the only
+> place a browser can supply it.
+>
+> **Not done: deleting `/api/live/stream`.** The requester said it becomes
+> redundant. It does in principle, but the live app's browser clients consume
+> that route today and moving them onto a tRPC subscription link is a client
+> refactor with no user-visible gain, in a session whose stated priority was the
+> adversarial pass. Both doorways still sit on one bus, so there is no
+> correctness cost — only the duplication the requester objected to. Logged as a
+> remaining risk, not as done.

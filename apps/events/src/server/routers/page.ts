@@ -50,14 +50,32 @@ async function renderPage(
 
   const theme = parseTheme(event.theme);
   const config = parseRegistrationConfig(event.registrationConfig);
-  const ticketTiersAvailable = event.ticketTiers.some(
-    (tier) => tierAvailability(tier).purchasable,
-  );
+  // CC-003: availability is computed once, here, and shipped on the contract.
+  // The tickets page used to query Prisma and recompute it — a second source of
+  // truth for what is on sale.
+  const now = new Date();
+  const tiers = event.ticketTiers.map((tier) => {
+    const a = tierAvailability(tier, now);
+    return {
+      id: a.id,
+      name: a.name,
+      description: a.description,
+      priceCents: a.priceCents,
+      currency: a.currency,
+      remaining: a.remaining,
+      purchasable: a.purchasable,
+      soldOut: a.soldOut,
+      opensAt: tier.opensAt,
+      closesAt: tier.closesAt,
+    };
+  });
+  const ticketTiersAvailable = tiers.some((tier) => tier.purchasable);
 
   return {
     event: eventSchema.parse(event),
     theme,
     ticketTiersAvailable,
+    tiers,
     sections: buildSections({
       event,
       organisationName: event.organisation?.name ?? null,

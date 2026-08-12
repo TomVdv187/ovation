@@ -1,0 +1,41 @@
+
+A1 · approve someone else's action
+  PASS  A1 cross-tenant approve — FORBIDDEN
+  PASS  A1 world untouched
+
+A2 · retarget the payload with `patch` at approval time
+  PASS  A2 patch cannot retarget across tenants
+
+A3 · patch a draft_emails action onto another org's guests
+  NOTE  A3 patch rejected before execution — BAD_REQUEST
+  PASS  A3 patch cannot draft into another org — status=undefined
+
+A4 · does approving draft_emails SEND anything?
+  PASS  A4 nothing is SENT — 3 rows, all APPROVED
+  PASS  A4 approved copy is used verbatim
+
+A5 · CC-001 regression: a >400-character body
+  PASS  A5 long body survives approval intact — 1200 chars
+
+A6 · auto-approve cannot clear an OUTBOUND action
+  PASS  A6 OUTBOUND refuses AUTO — stayed PROPOSED
+  NOTE  A6 COSMETIC under auto-approve — status=EXECUTED (expected EXECUTED — this is the documented opt-in)
+
+A7 · double approval of the same action
+  PASS  A7 concurrent double approve writes once — 1 EmailMessage
+
+A8 · reject then approve
+  PASS  A8 a rejected action cannot be approved — REJECTED
+
+A9 · cross-tenant reads
+  PASS  A9 agent.history is tenant-scoped
+  PASS  A9 agent.actions is tenant-scoped
+
+A10 · can any OTHER mounted router cause a side effect?
+  PASS  A10 a firing pricing rule creates no tier — 1 rule(s) fired, 2 tiers before and after
+  PASS  A10 proposals are PROPOSED — 1
+  NOTE  A10 personaliseInvite — threw PRECONDITION_FAILED ANTHROPIC_API_KEY is not configured, so invitations cannot be written. This feature has no
+  PASS  A10 personaliseInvite sends nothing
+
+A11 · does anything reach status SENT anywhere in the rig?
+  PASS  A11 zero SENT emails across the whole rig

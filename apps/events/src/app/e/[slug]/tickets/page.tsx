@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
+import type { PublicTicketTier } from "@ovation/core";
 import { notFound } from "next/navigation";
 import { Container } from "~/components/layout";
 import { TicketPicker, type TierView } from "~/components/ticket-picker";
 import { formatDateShort, formatMoney } from "~/lib/format";
-import { findPublicEvent, tierAvailability } from "~/server/event";
 import { paymentsEnabled } from "~/server/stripe";
+import { api } from "~/server/router";
 import { checkoutAction } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -27,28 +28,30 @@ export default async function TicketsPage({
   const { slug } = await params;
   const { cancelled } = await searchParams;
 
-  const event = await findPublicEvent(slug);
-  if (!event) notFound();
+  // CC-003: one source of truth for what is on sale. This used to read Prisma
+  // directly and recompute availability with its own copy of the rules.
+  const rendered = await api()
+    .page.render({ slug, preview: false })
+    .catch(() => null);
+  if (!rendered) notFound();
+  const { event } = rendered;
 
   const now = new Date();
-  const tiers: TierView[] = event.ticketTiers.map((tier) => {
-    const availability = tierAvailability(tier, now);
-    return {
-      id: tier.id,
-      name: tier.name,
-      description: tier.description,
-      priceLabel:
-        tier.priceCents === 0
-          ? "Free"
-          : formatMoney(tier.priceCents, tier.currency),
-      free: tier.priceCents === 0,
-      remaining: availability.remaining,
-      purchasable: availability.purchasable,
-      unavailableLabel: availability.purchasable
-        ? null
-        : unavailableLabel(tier, availability.remaining, now, event.timezone),
-    };
-  });
+  const tiers: TierView[] = rendered.tiers.map((tier) => ({
+    id: tier.id,
+    name: tier.name,
+    description: tier.description,
+    priceLabel:
+      tier.priceCents === 0
+        ? "Free"
+        : formatMoney(tier.priceCents, tier.currency),
+    free: tier.priceCents === 0,
+    remaining: tier.remaining,
+    purchasable: tier.purchasable,
+    unavailableLabel: tier.purchasable
+      ? null
+      : unavailableLabel(tier, now, event.timezone),
+  }));
 
   const anyBuyable = tiers.some((tier) => tier.purchasable);
 
@@ -115,17 +118,16 @@ export default async function TicketsPage({
 }
 
 function unavailableLabel(
-  tier: { status: string; opensAt: Date | null; closesAt: Date | null },
-  remaining: number,
+  tier: PublicTicketTier,
   now: Date,
   timezone: string,
 ): string {
-  if (tier.status === "SOLD_OUT" || remaining === 0) return "Sold out";
-  if (tier.status === "CLOSED") return "Closed";
-  if (tier.status === "DRAFT") return "Not on sale yet";
+  if (tier.soldOut) return "Sold out";
   if (tier.opensAt && tier.opensAt > now) {
     return `On sale from ${formatDateShort(tier.opensAt, timezone)}`;
   }
   if (tier.closesAt && tier.closesAt <= now) return "Sales have closed";
-  return "Unavailable";
+  // CC-003 deliberately keeps the raw TicketTierStatus off a public endpoint,
+  // so "closed" and "not on sale yet" collapse into one honest label.
+  return "Not on sale";
 }

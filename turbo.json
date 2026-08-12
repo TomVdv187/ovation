@@ -43,6 +43,39 @@
       "dependsOn": ["^build"],
       "outputs": []
     },
+    // CC-005: @ovation/core#typecheck used to run `prisma generate && tsc`
+    // while @ovation/core#build ran `prisma generate`, and turbo scheduled both
+    // concurrently — two generate processes racing on the same engine binary,
+    // which fails with EPERM on Windows. `prisma generate` is now gone from the
+    // typecheck script and supplied by this ordering instead. NOTE: the fix the
+    // request suggested (rely on the generic "dependsOn": ["^build"]) would NOT
+    // have worked: ^build means the builds of core's DEPENDENCIES, and core has
+    // none, so a cold typecheck would have run tsc with no generated client.
+    "@ovation/core#typecheck": {
+      "dependsOn": ["@ovation/core#build"],
+      "outputs": []
+    },
+    // Phase 3: the console mounts `page` and `live`, so it now has workspace
+    // dependencies on two sibling Next apps. It consumes their TypeScript
+    // SOURCE through transpilePackages, never their .next output, so the
+    // generic `^build` would make every console typecheck wait on two full
+    // Next builds for nothing (9 tasks -> 11, 8s -> 2m30). The only build
+    // artifact the console genuinely needs is the generated Prisma client.
+    "@ovation/console#typecheck": {
+      "dependsOn": ["@ovation/core#build"],
+      "outputs": []
+    },
+    // Same reasoning for the e2e suite: it imports server modules from the
+    // three apps as TypeScript source and drives them in-process, so it needs
+    // the generated Prisma client and nothing else built.
+    "@ovation/e2e#typecheck": {
+      "dependsOn": ["@ovation/core#build"],
+      "outputs": []
+    },
+    "@ovation/console#build": {
+      "dependsOn": ["@ovation/core#build"],
+      "outputs": [".next/**", "!.next/cache/**"]
+    },
     "lint": {
       "outputs": []
     },

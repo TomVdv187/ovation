@@ -1,0 +1,31 @@
+
+I · every mounted router answers through the console
+  PASS  I1 event.get
+  PASS  I1 agent.actions
+  PASS  I1 page.render
+  PASS  I1 guests.list
+  PASS  I1 revenue.summary
+  PASS  I1 live.ops
+  PASS  I1 live.matchmaking
+
+J · the seeded numbers, read through the contract
+  PASS  J1 ticket revenue — EUR 28,140
+  PASS  J2 sponsor revenue — EUR 24,500
+  PASS  J3 200 guests through guests.list
+  PASS  J4 no .test emails
+  PASS  J5 zero check-ins on the seeded event
+  PASS  J6 three open PROPOSED proposals
+  PASS  J7 theme.preset is blacktie
+  PASS  J8 page.render carries the tiers — 3
+  PASS  J9 no sell-through on the public projection
+
+K · cross-agent flows
+  PASS  K1 live.matchmaking resolves guests.list — 4 match(es)
+  PASS  K2 CC-007 introduction persisted — 1 row
+  PASS  K2 reversed pair does not duplicate
+  PASS  K3 default cues seeded on first read — 3
+  PASS  K3 disabling a cue survives a re-read
+  PASS  K3 cues are rows, not a Map — 3
+  PASS  K4 CC-009 channel parsing — 4 cases
+  NOTE  K5 announce delivery — deliveredCount=0
+  PASS  K5 announcement persisted — 1

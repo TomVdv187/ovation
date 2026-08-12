@@ -1,0 +1,184 @@
+
+B1 · 120 concurrent buyers, 10 seats, 1 seat each
+prisma:error 
+Invalid `prisma.$executeRaw()` invocation:
+
+
+Transaction API error: Transaction already closed: A query cannot be executed on an expired transaction. The timeout for this transaction was 5000 ms, however 6128 ms passed since the start of the transaction. Consider increasing the interactive transaction timeout or doing less work in the transaction.
+prisma:error 
+Invalid `prisma.$executeRaw()` invocation:
+
+
+Transaction API error: Transaction already closed: A query cannot be executed on an expired transaction. The timeout for this transaction was 5000 ms, however 7384 ms passed since the start of the transaction. Consider increasing the interactive transaction timeout or doing less work in the transaction.
+prisma:error 
+Invalid `prisma.$executeRaw()` invocation:
+
+
+Transaction API error: Transaction already closed: A query cannot be executed on an expired transaction. The timeout for this transaction was 5000 ms, however 7874 ms passed since the start of the transaction. Consider increasing the interactive transaction timeout or doing less work in the transaction.
+prisma:error 
+Invalid `prisma.$executeRaw()` invocation:
+
+
+Transaction API error: Transaction already closed: A query cannot be executed on an expired transaction. The timeout for this transaction was 5000 ms, however 6913 ms passed since the start of the transaction. Consider increasing the interactive transaction timeout or doing less work in the transaction.
+prisma:error 
+Invalid `prisma.$executeRaw()` invocation:
+
+
+Transaction API error: Transaction already closed: A query cannot be executed on an expired transaction. The timeout for this transaction was 5000 ms, however 8348 ms passed since the start of the transaction. Consider increasing the interactive transaction timeout or doing less work in the transaction.
+prisma:error 
+Invalid `prisma.$executeRaw()` invocation:
+
+
+Transaction API error: Transaction already closed: A query cannot be executed on an expired transaction. The timeout for this transaction was 5000 ms, however 8577 ms passed since the start of the transaction. Consider increasing the interactive transaction timeout or doing less work in the transaction.
+      won=10 {"sold":10,"quota":10,"status":"SOLD_OUT","orders":10,"seatsOrdered":10}
+  PASS  B1 exactly the quota was sold — status=SOLD_OUT
+  PASS  B1 tier closed itself
+
+B2 · 200 concurrent buyers, 60 seats, 1-4 seats each
+prisma:error 
+Invalid `tx.order.create()` invocation in
+D:\Ovation\.claude\worktrees\agent-abbe6005a76fefc93\apps\events\src\server\ticketing.ts:203:34
+
+  200      AND status = 'ON_SALE'::"TicketTierStatus"
+  201      AND sold >= quota`;
+  202 
+→ 203 const order = await tx.order.create(
+Transaction API error: Transaction not found. Transaction ID is invalid, refers to an old closed transaction Prisma doesn't have information about anymore, or was obtained before disconnecting.
+prisma:error 
+Invalid `prisma.$executeRaw()` invocation:
+
+
+Transaction API error: Transaction already closed: A query cannot be executed on an expired transaction. The timeout for this transaction was 5000 ms, however 6185 ms passed since the start of the transaction. Consider increasing the interactive transaction timeout or doing less work in the transaction.
+prisma:error 
+Invalid `prisma.$executeRaw()` invocation:
+
+
+Transaction API error: Transaction already closed: A query cannot be executed on an expired transaction. The timeout for this transaction was 5000 ms, however 7175 ms passed since the start of the transaction. Consider increasing the interactive transaction timeout or doing less work in the transaction.
+prisma:error 
+Invalid `prisma.$executeRaw()` invocation:
+
+
+Transaction API error: Transaction already closed: A query cannot be executed on an expired transaction. The timeout for this transaction was 5000 ms, however 8154 ms passed since the start of the transaction. Consider increasing the interactive transaction timeout or doing less work in the transaction.
+prisma:error 
+Invalid `prisma.$executeRaw()` invocation:
+
+
+Transaction API error: Transaction already closed: A query cannot be executed on an expired transaction. The timeout for this transaction was 5000 ms, however 5690 ms passed since the start of the transaction. Consider increasing the interactive transaction timeout or doing less work in the transaction.
+prisma:error 
+Invalid `prisma.$executeRaw()` invocation:
+
+
+Transaction API error: Transaction already closed: A query cannot be executed on an expired transaction. The timeout for this transaction was 5000 ms, however 5928 ms passed since the start of the transaction. Consider increasing the interactive transaction timeout or doing less work in the transaction.
+prisma:error 
+Invalid `prisma.$executeRaw()` invocation:
+
+
+Transaction API error: Transaction already closed: A query cannot be executed on an expired transaction. The timeout for this transaction was 5000 ms, however 5404 ms passed since the start of the transaction. Consider increasing the interactive transaction timeout or doing less work in the transaction.
+prisma:error 
+Invalid `prisma.$executeRaw()` invocation:
+
+
+Transaction API error: Transaction already closed: A query cannot be executed on an expired transaction. The timeout for this transaction was 5000 ms, however 12823 ms passed since the start of the transaction. Consider increasing the interactive transaction timeout or doing less work in the transaction.
+prisma:error 
+Invalid `prisma.$executeRaw()` invocation:
+
+
+Transaction API error: Transaction already closed: A query cannot be executed on an expired transaction. The timeout for this transaction was 5000 ms, however 8867 ms passed since the start of the transaction. Consider increasing the interactive transaction timeout or doing less work in the transaction.
+prisma:error 
+Invalid `prisma.$executeRaw()` invocation:
+
+
+Transaction API error: Transaction already closed: A query cannot be executed on an expired transaction. The timeout for this transaction was 5000 ms, however 6402 ms passed since the start of the transaction. Consider increasing the interactive transaction timeout or doing less work in the transaction.
+prisma:error 
+Invalid `prisma.$executeRaw()` invocation:
+
+
+Transaction API error: Transaction already closed: A query cannot be executed on an expired transaction. The timeout for this transaction was 5000 ms, however 9371 ms passed since the start of the transaction. Consider increasing the interactive transaction timeout or doing less work in the transaction.
+prisma:error 
+Invalid `prisma.$executeRaw()` invocation:
+
+
+Transaction API error: Transaction already closed: A query cannot be executed on an expired transaction. The timeout for this transaction was 5000 ms, however 5676 ms passed since the start of the transaction. Consider increasing the interactive transaction timeout or doing less work in the transaction.
+prisma:error 
+Invalid `prisma.$executeRaw()` invocation:
+
+
+Transaction API error: Transaction already closed: A query cannot be executed on an expired transaction. The timeout for this transaction was 5000 ms, however 13056 ms passed since the start of the transaction. Consider increasing the interactive transaction timeout or doing less work in the transaction.
+prisma:error 
+Invalid `prisma.$executeRaw()` invocation:
+
+
+Transaction API error: Transaction already closed: A query cannot be executed on an expired transaction. The timeout for this transaction was 5000 ms, however 10361 ms passed since the start of the transaction. Consider increasing the interactive transaction timeout or doing less work in the transaction.
+prisma:error 
+Invalid `prisma.$executeRaw()` invocation:
+
+
+Transaction API error: Transaction already closed: A query cannot be executed on an expired transaction. The timeout for this transaction was 5000 ms, however 6385 ms passed since the start of the transaction. Consider increasing the interactive transaction timeout or doing less work in the transaction.
+prisma:error 
+Invalid `prisma.$executeRaw()` invocation:
+
+
+Transaction API error: Transaction already closed: A query cannot be executed on an expired transaction. The timeout for this transaction was 5000 ms, however 7638 ms passed since the start of the transaction. Consider increasing the interactive transaction timeout or doing less work in the transaction.
+prisma:error 
+Invalid `prisma.$executeRaw()` invocation:
+
+
+Transaction API error: Transaction already closed: A query cannot be executed on an expired transaction. The timeout for this transaction was 5000 ms, however 22669 ms passed since the start of the transaction. Consider increasing the interactive transaction timeout or doing less work in the transaction.
+      won=23 {"sold":60,"quota":60,"status":"SOLD_OUT","orders":23,"seatsOrdered":60}
+  PASS  B2 never sold past quota, and sold matches seats ordered — sold=60/60 across 23 orders
+
+B3 · one seat left, 300 concurrent attempts
+      won=1 {"sold":100,"quota":100,"status":"SOLD_OUT","orders":1,"seatsOrdered":1}
+  PASS  B3 exactly one buyer got the last seat
+
+B4 · release returns the seat
+  PASS  B4 cancelling gives the seats back — status=ON_SALE
+  PASS  B4 double release does not go negative
+
+B5 · malformed quantities
+  PASS  B5 negative rejected
+  PASS  B5 zero rejected
+  NOTE  B5 fractional — floored to 1 seat(s)
+  PASS  B5 huge rejected
+  PASS  B5 NaN rejected
+  PASS  B5 Infinity rejected
+
+B6 · a tier id from another event
+  PASS  B6 refused a foreign tier
+
+B7 · a tier that is not on sale
+  PASS  B7 DRAFT refused
+  PASS  B7 CLOSED refused
+  PASS  B7 SOLD_OUT refused
+
+B8 · CC-002 buyerName persists to the Order row
+
+────────────────────────────────────────────────────────────────────────
+  EMAIL — not sent (RESEND_API_KEY is unset). Printed instead.
+────────────────────────────────────────────────────────────────────────
+  From:    OVATION <hello@ovation.local>
+  To:      b8@example.invalid
+  Subject: You're in — Critic Rig A
+  Attachments:
+  • critic-rig-a.ics (text/calendar; charset=utf-8; method=PUBLISH, 407 bytes)
+  • check-in-code.png (image/png, 7031 bytes)
+────────────────────────────────────────────────────────────────────────
+Sophie Delacroix,
+
+Your place is confirmed. Everything you need for the evening is below.
+
+When: Friday, 11 September 2026, 10:15 CEST
+Where: Rig Hall
+
+Your check-in code: http://localhost:3001/e/critic-rig-a/ticket?t=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJnaWQiOiJjbXNwdGd4OGEwMDNob3Z3Y3hyN3VhYjk5IiwiZWlkIjoiY21zcHRlZ25uMDAwN292d2NuczMzd3d4byIsImlhdCI6MTc4NjUyMjY2NywiZXhwIjoxNzg5MjAwOTUzfQ.eLt6l6kBZnA3p_RxvClNscVUzFY9rq7f2MmbTktQBrQ
+
+If the link will not open, the code itself is:
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJnaWQiOiJjbXNwdGd4OGEwMDNob3Z3Y3hyN3VhYjk5IiwiZWlkIjoiY21zcHRlZ25uMDAwN292d2NuczMzd3d4byIsImlhdCI6MTc4NjUyMjY2NywiZXhwIjoxNzg5MjAwOTUzfQ.eLt6l6kBZnA3p_RxvClNscVUzFY9rq7f2MmbTktQBrQ
+
+Event page: http://localhost:3001/e/critic-rig-a
+
+A calendar invitation is attached.
+────────────────────────────────────────────────────────────────────────
+
+  PASS  B8 Order.buyerName persisted
+  PASS  B8 fulfilment named the guest

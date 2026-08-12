@@ -1,7 +1,7 @@
 import type { z } from "zod";
 import type { Db } from "@ovation/core/db";
 import type { announceInput, announceOutput } from "@ovation/core";
-import { deliveryCount, emit, type LiveChannel } from "~/server/realtime";
+import { deliveryCount, emit, type LiveChannel } from "../realtime";
 
 export type AnnounceInput = z.infer<typeof announceInput>;
 export type AnnounceOutput = z.infer<typeof announceOutput>;

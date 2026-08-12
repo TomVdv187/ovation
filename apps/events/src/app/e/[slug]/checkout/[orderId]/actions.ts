@@ -25,9 +25,10 @@ export async function confirmLocalPayment(formData: FormData): Promise<void> {
   assertLocalOnly();
   const slug = String(formData.get("slug") ?? "");
   const orderId = String(formData.get("orderId") ?? "");
-  const buyerName = String(formData.get("buyerName") ?? "").trim() || null;
 
-  await fulfilOrder(orderId, { buyerName });
+  // CC-002: the buyer's name is on the Order row, so it no longer has to be
+  // smuggled through the URL and back in through a hidden form field.
+  await fulfilOrder(orderId);
   redirect(`/e/${slug}/order/${orderId}`);
 }
 

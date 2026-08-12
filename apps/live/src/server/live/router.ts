@@ -19,7 +19,7 @@ import {
   type LiveEvent,
   type Sponsor,
 } from "@ovation/core";
-import { parseChannel, subscribe } from "~/server/realtime";
+import { parseChannel, subscribe } from "../realtime";
 import { announce } from "./announce";
 import { performCheckin } from "./checkin";
 import { opsSnapshot } from "./ops";
@@ -73,8 +73,10 @@ export const liveRouter = router({
       input,
       signal,
     }): AsyncGenerator<LiveEvent, void, unknown> {
+      // CC-009: the channel is on the input now. The header is still read as
+      // a fallback so an existing server-side caller keeps working.
       const channel = parseChannel(
-        ctx.headers?.get("x-ovation-live-channel"),
+        input.channel ?? ctx.headers?.get("x-ovation-live-channel"),
         "ops",
       );
       startCueTimer(ctx.db, input.eventId);
@@ -152,7 +154,7 @@ export const liveRouter = router({
         guests,
         sponsors,
         arrived,
-        introduced: introductionsFor(input.eventId),
+        introduced: await introductionsFor(ctx.db, input.eventId),
         limit: input.limit,
       });
     }),
@@ -160,8 +162,16 @@ export const liveRouter = router({
   markIntroduced: orgProcedure
     .input(markIntroducedInput)
     .output(z.object({ ok: z.literal(true) }))
-    .mutation(({ input }) => {
-      recordIntroduction(input.eventId, input.guestId, input.withGuestId);
+    .mutation(async ({ ctx, input }) => {
+      // CC-007: persisted, so a host who reloads their phone keeps it and a
+      // second host is not offered an introduction the first already made.
+      await recordIntroduction(
+        ctx.db,
+        input.eventId,
+        input.guestId,
+        input.withGuestId,
+        ctx.session.user.id,
+      );
       return { ok: true as const };
     }),
 
@@ -174,7 +184,7 @@ export const liveRouter = router({
       signal,
     }): AsyncGenerator<LiveEvent, void, unknown> {
       const channel = parseChannel(
-        ctx.headers?.get("x-ovation-live-channel"),
+        input.channel ?? ctx.headers?.get("x-ovation-live-channel"),
         "guest-app",
       );
       // Guests get the audience channels only; never `ops`, never `door`.
@@ -203,7 +213,7 @@ export { pairKey };
  * another agent's data.
  */
 async function peerCaller(ctx: Context) {
-  const { createPeerCaller } = await import("~/server/peers");
+  const { createPeerCaller } = await import("../peers");
   return createPeerCaller(ctx);
 }
 
