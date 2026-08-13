@@ -20,6 +20,9 @@
     "db:push": "dotenv -e ../../.env -- tsx prisma/push.ts",
     "db:push:tcp": "dotenv -e ../../.env -- prisma db push",
     "db:seed": "dotenv -e ../../.env -- tsx prisma/seed.ts",
+    "db:bootstrap": "dotenv -e ../../.env -- tsx prisma/bootstrap.ts",
+    "db:push:prod": "dotenv -e ../../.env.production -- tsx prisma/push.ts",
+    "db:bootstrap:prod": "dotenv -e ../../.env.production -- tsx prisma/bootstrap.ts",
     "db:studio": "dotenv -e ../../.env -- prisma studio",
     "db:reset": "dotenv -e ../../.env -- tsx prisma/push.ts --force && pnpm db:seed",
     "clean": "rimraf .turbo node_modules/.prisma *.tsbuildinfo"

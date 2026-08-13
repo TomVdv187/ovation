@@ -64,6 +64,44 @@ Anything that is not a Neon URL — local Postgres, CI, a container — falls
 through to the plain TCP client and `pnpm db:push:tcp`. Nothing here forces a
 hosted database on you.
 
+### Two databases: development and production
+
+They are separate Neon **branches** of the same project, which gives each its
+own storage, its own compute endpoint and — the part that matters — its own
+point-in-time-restore history. Restoring development to undo a mistake cannot
+roll production back with it.
+
+| | branch | contains | who points at it |
+| :-- | :-- | :-- | :-- |
+| development | `main` | the seeded demo — Meridian Summit 2026, 200 guests | local `.env`, Vercel preview + development |
+| production | `production` | real data only | Vercel production, all three apps |
+
+The seed and production are mutually exclusive by design. `db:seed` builds the
+fixture every test asserts against; that is precisely what production must not
+have. But an empty database is not usable either — nothing in the app creates
+an Organisation, NextAuth writes a User with `organisationId` null, and
+`protectedProcedure` answers FORBIDDEN to every query until it points
+somewhere. `db:bootstrap` writes those two rows and nothing else.
+
+Production credentials live in `.env.production` at the repo root, which is
+gitignored like `.env`. The `:prod` scripts are the only ones that read it:
+
+```bash
+pnpm db:push:prod                     # apply the schema to production
+pnpm db:bootstrap:prod --org "Ovation" --email you@example.com
+```
+
+Everything else — `db:seed`, `db:reset`, `db:push` — reads `.env` and can only
+ever reach development. That asymmetry is deliberate: the destructive commands
+have no path to production without you naming the other file explicitly.
+`db:bootstrap` refuses outright if it finds events or guests already there,
+since an empty production database has neither.
+
+To rotate or re-point production, set `DATABASE_URL` and `DIRECT_URL` for the
+**production** environment only, on all three Vercel projects. The Neon
+integration manages the preview and development copies; production is set out
+of band so the integration does not overwrite it.
+
 ---
 
 ## Architecture
