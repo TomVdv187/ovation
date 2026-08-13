@@ -124,6 +124,27 @@ To rotate or re-point production, set `DATABASE_URL` and `DIRECT_URL` for the
 integration manages the preview and development copies; production is set out
 of band so the integration does not overwrite it.
 
+### After rotating the development password
+
+```bash
+node scripts/pull-db-credentials.mjs
+```
+
+Pulls the development credentials from Vercel into `.env` — the Vercel REST
+API returns an encrypted envelope, so the CLI is the only way to read the
+plaintext, and this wraps it. It writes nothing unless the value actually
+changed, and it says which of three things is true: the old credential still
+works (**nothing rotated**), the old credential is refused (**rotated, Vercel
+not synced yet**), or the database could not be reached at all (**unknown** —
+not evidence either way).
+
+That last distinction is the point. A failed connection and a rejected
+password are different answers, and only Postgres' `28P01` means the password
+was refused. Treating any error as "the credential is dead" reports a rotation
+that never happened — which is exactly what it did before it was fixed.
+Passwords are only ever compared and displayed as short hashes, so the output
+is safe to read aloud.
+
 ---
 
 ## Architecture
