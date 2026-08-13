@@ -124,6 +124,30 @@ To rotate or re-point production, set `DATABASE_URL` and `DIRECT_URL` for the
 integration manages the preview and development copies; production is set out
 of band so the integration does not overwrite it.
 
+### The development password was rotated by SQL, once
+
+`neondb_owner`'s password was changed with `ALTER ROLE`, not through the Neon
+console, because this project uses Neon's **native Vercel integration**: the
+Neon project (`gentle-glitter-38023117`) belongs to Vercel's Neon organisation
+and does not appear in a personal Neon account. Reaching it means going through
+Vercel → Storage → `neon-emerald-sail` → **Open in Neon**, which is not obvious.
+
+Postgres was updated and so were `.env` and every Vercel `DATABASE_URL` /
+`DIRECT_URL` for preview and development. **Neon's control plane was not**, so:
+
+- the Neon console and the integration's other exported variables
+  (`PGPASSWORD`, `POSTGRES_URL`, `POSTGRES_PRISMA_URL`, …) still show the old
+  password. Nothing in this repo reads them — the apps read `DATABASE_URL` and
+  `DIRECT_URL` — but they are stale;
+- if the Neon–Vercel integration ever re-syncs, it may push the old password
+  back into Vercel. That shows up as `28P01 password authentication failed` on
+  preview or development deployments. The fix is to reset the password through
+  **Open in Neon** and then run `pull-db-credentials.mjs`, which puts the
+  control plane back in charge.
+
+Production is unaffected either way: it runs as `ovation_prod_app` on
+`ovation_prod`, a role with its own credential.
+
 ### After rotating the development password
 
 ```bash

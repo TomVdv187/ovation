@@ -139,7 +139,7 @@ try {
       const { state, detail } = await credentialState(current);
       if (state === "ok") {
         console.log(
-          `  The credential in .env still authenticates (${detail}), so NO rotation has taken effect.`,
+          `  The credential in .env authenticates (${detail}). If you were waiting on a rotation, it has NOT taken effect.`,
         );
       } else if (state === "denied") {
         console.log(
