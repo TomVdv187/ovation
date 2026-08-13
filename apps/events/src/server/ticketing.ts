@@ -1,5 +1,6 @@
 import { db } from "@ovation/core/db";
 import { eventsBaseUrl, findPublicEvent, tierAvailability } from "./event";
+import { createOrderId } from "./order-id";
 import { sendConfirmation } from "./registration";
 import { signQrToken, ticketExpiry } from "./qr-token";
 import { paymentsEnabled, stripeClient } from "./stripe";
@@ -18,6 +19,25 @@ import { paymentsEnabled, stripeClient } from "./stripe";
  * first one's write, its guard fails and it comes back with zero rows updated.
  * There is no read, no check-then-act, and therefore no window to lose.
  *
+ * The second rule, learned the hard way: ONE STATEMENT, NOT ONE TRANSACTION.
+ *
+ * Serialising on the row is the design, so the only thing that matters under a
+ * rush is how long each buyer holds it. That is the time between the UPDATE and
+ * the COMMIT — and in an interactive transaction, every statement in between is
+ * a network round trip. Taking the seats, closing the tier and opening the order
+ * as three statements held the row for three round trips; on a link with 250 ms
+ * of latency that is most of a second, per buyer, strictly one at a time. A
+ * hundred buyers queue for a minute and a half, Prisma's 5 s transaction timeout
+ * fires long before their turn, and a large minority of a real on-sale gets an
+ * exception instead of a ticket.
+ *
+ * So reservation is one statement — a data-modifying CTE that takes the seats,
+ * closes the tier if that was the last one, and inserts the Order, all inside a
+ * single implicit transaction. The row is held for one server-side statement
+ * instead of three network round trips, and there is no interactive transaction
+ * left to time out. Release is one statement for the same reason: it lands on
+ * the same contended row, during the same rush.
+ *
  * Seats are reserved when the order is created, not when payment lands. An
  * abandoned checkout gives them back (checkout.session.expired, or the order
  * page reconciling), which costs a little inventory for a while and buys the
@@ -27,6 +47,20 @@ import { paymentsEnabled, stripeClient } from "./stripe";
 export class SoldOutError extends Error {
   constructor() {
     super("Those seats went while you were deciding.");
+  }
+}
+
+/**
+ * The database would not hold the seats — busy, unreachable, anything that is
+ * not a plain "no room". Distinct from SoldOutError because it means try again,
+ * not give up, and because a guest must never be shown either one as a stack
+ * trace.
+ */
+export class ReservationUnavailableError extends Error {
+  constructor(cause: unknown) {
+    super("We could not hold those seats just now. Please try again.", {
+      cause,
+    });
   }
 }
 
@@ -98,6 +132,22 @@ export async function startCheckout(
   } catch (cause) {
     if (cause instanceof SoldOutError) {
       return { ok: false, errors: {}, formError: cause.message };
+    }
+    // Whatever went wrong, the guest is owed a sentence rather than a 500. The
+    // reservation is one statement, so a failure here means it did not commit:
+    // no seats were taken, and nothing has been charged either way — payment
+    // happens after this point, never before it.
+    if (cause instanceof ReservationUnavailableError) {
+      console.error(
+        "[ticketing] could not reserve seats:",
+        cause.cause instanceof Error ? cause.cause.message : cause.cause,
+      );
+      return {
+        ok: false,
+        errors: {},
+        formError:
+          "We could not hold those seats just now — nothing has been charged. Please try again.",
+      };
     }
     throw cause;
   }
@@ -179,46 +229,73 @@ interface ReserveInput {
   buyerName: string;
 }
 
-/** Takes the seats and opens a PENDING order, or throws SoldOutError. */
+/**
+ * Takes the seats and opens a PENDING order in one statement, or throws
+ * SoldOutError.
+ *
+ * The CTE does three things that used to be three round trips:
+ *
+ *   1. takes the seats, guarded by `sold + n <= quota` — unchanged, and still
+ *      the only thing standing between this event and an oversold room;
+ *   2. closes the tier if that was the last seat. `sold` inside SET reads the
+ *      value from BEFORE this statement, so `sold + n >= quota` is the same
+ *      "did I take the last one" test the separate UPDATE used to make. Agent
+ *      4's auto-open rules watch for exactly this transition;
+ *   3. inserts the Order — but `FROM taken`, so if the guard in step 1 matched
+ *      nothing, there is no row to insert from and no order appears.
+ *
+ * That last join is what makes the pair atomic without an interactive
+ * transaction: seats and order are taken by one statement, so they commit
+ * together or not at all. Zero rows back means the tier had no room.
+ */
 async function reserve(input: ReserveInput): Promise<string> {
-  return db.$transaction(async (tx) => {
-    const taken = await tx.$executeRaw`
-      UPDATE "TicketTier"
-         SET sold = sold + ${input.quantity}, "updatedAt" = NOW()
-       WHERE id = ${input.tierId}
-         AND status = 'ON_SALE'::"TicketTierStatus"
-         AND sold + ${input.quantity} <= quota`;
+  const orderId = createOrderId();
 
-    if (taken === 0) throw new SoldOutError();
+  let rows: Array<{ id: string }>;
+  try {
+    rows = await db.$queryRaw<Array<{ id: string }>>`
+      WITH taken AS (
+        UPDATE "TicketTier"
+           SET sold = sold + ${input.quantity}::int,
+               status = CASE
+                          WHEN sold + ${input.quantity}::int >= quota
+                          THEN 'SOLD_OUT'::"TicketTierStatus"
+                          ELSE status
+                        END,
+               "updatedAt" = NOW()
+         WHERE id = ${input.tierId}::text
+           AND status = 'ON_SALE'::"TicketTierStatus"
+           AND sold + ${input.quantity}::int <= quota
+        RETURNING id
+      )
+      INSERT INTO "Order" (
+        id, "eventId", "tierId", email, "buyerName",
+        quantity, "amountCents", currency, status, "createdAt", "updatedAt"
+      )
+      SELECT
+        ${orderId}::text,
+        ${input.eventId}::text,
+        taken.id,
+        ${input.email}::text,
+        -- CC-002: the name typed at checkout has a column. It used to ride in a
+        -- query parameter (local path) or Stripe session metadata (real path)
+        -- and be handed back to fulfilOrder out of band.
+        ${input.buyerName}::text,
+        ${input.quantity}::int,
+        ${input.amountCents}::int,
+        ${input.currency}::text,
+        'PENDING'::"OrderStatus",
+        NOW(),
+        NOW()
+      FROM taken
+      RETURNING id`;
+  } catch (cause) {
+    throw new ReservationUnavailableError(cause);
+  }
 
-    // Whoever took the last seat closes the tier. Agent 4's auto-open rules
-    // watch for exactly this transition.
-    await tx.$executeRaw`
-      UPDATE "TicketTier"
-         SET status = 'SOLD_OUT'::"TicketTierStatus", "updatedAt" = NOW()
-       WHERE id = ${input.tierId}
-         AND status = 'ON_SALE'::"TicketTierStatus"
-         AND sold >= quota`;
-
-    const order = await tx.order.create({
-      data: {
-        eventId: input.eventId,
-        tierId: input.tierId,
-        email: input.email,
-        // CC-002: the name typed at checkout now has a column. It used to ride
-        // in a query parameter (local path) or Stripe session metadata (real
-        // path) and be handed back to fulfilOrder out of band.
-        buyerName: input.buyerName,
-        quantity: input.quantity,
-        amountCents: input.amountCents,
-        currency: input.currency,
-        status: "PENDING",
-      },
-      select: { id: true },
-    });
-
-    return order.id;
-  });
+  const order = rows[0];
+  if (!order) throw new SoldOutError();
+  return order.id;
 }
 
 export interface FulfilInput {
@@ -364,39 +441,46 @@ export async function fulfilOrder(
 
 /**
  * Gives the seats back. Used when a checkout expires, fails, or never opens.
+ *
+ * One statement, like reservation, and for the same two reasons. It touches the
+ * same contended TicketTier row during the same rush — a flash sale that sells
+ * out is a flash sale full of abandoned checkouts moments later — and the claim
+ * and the credit have to be atomic. If they were not, a release interrupted
+ * between them would either lose seats forever or, worse, credit them twice.
+ *
+ * Idempotent by construction: the PENDING -> CANCELLED/FAILED transition is
+ * guarded, and `returned` credits seats only `FROM claimed`. A second release
+ * claims nothing, so it credits nothing, so `sold` cannot drift downwards.
  */
 export async function releaseOrder(
   orderId: string,
   status: "CANCELLED" | "FAILED",
 ): Promise<boolean> {
-  const order = await db.order.findUnique({
-    where: { id: orderId },
-    select: { id: true, tierId: true, quantity: true, status: true },
-  });
-  if (!order || order.status !== "PENDING") return false;
+  const rows = await db.$queryRaw<Array<{ id: string }>>`
+    WITH claimed AS (
+      UPDATE "Order"
+         SET status = ${status}::"OrderStatus", "updatedAt" = NOW()
+       WHERE id = ${orderId}::text
+         AND status = 'PENDING'::"OrderStatus"
+      RETURNING id, "tierId", quantity
+    ), returned AS (
+      UPDATE "TicketTier" t
+         SET sold = GREATEST(t.sold - c.quantity, 0),
+             -- Back on sale if the returned seats reopened it.
+             status = CASE
+                        WHEN t.status = 'SOLD_OUT'::"TicketTierStatus"
+                         AND GREATEST(t.sold - c.quantity, 0) < t.quota
+                        THEN 'ON_SALE'::"TicketTierStatus"
+                        ELSE t.status
+                      END,
+             "updatedAt" = NOW()
+        FROM claimed c
+       WHERE t.id = c."tierId"
+      RETURNING t.id
+    )
+    SELECT id FROM claimed`;
 
-  const claimed = await db.order.updateMany({
-    where: { id: orderId, status: "PENDING" },
-    data: { status },
-  });
-  if (claimed.count === 0) return false;
-
-  await db.$transaction(async (tx) => {
-    await tx.$executeRaw`
-      UPDATE "TicketTier"
-         SET sold = GREATEST(sold - ${order.quantity}, 0), "updatedAt" = NOW()
-       WHERE id = ${order.tierId}`;
-
-    // Back on sale if the returned seats reopened it.
-    await tx.$executeRaw`
-      UPDATE "TicketTier"
-         SET status = 'ON_SALE'::"TicketTierStatus", "updatedAt" = NOW()
-       WHERE id = ${order.tierId}
-         AND status = 'SOLD_OUT'::"TicketTierStatus"
-         AND sold < quota`;
-  });
-
-  return true;
+  return rows.length > 0;
 }
 
 /**

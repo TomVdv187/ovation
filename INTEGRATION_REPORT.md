@@ -490,6 +490,25 @@ the 250 ms network here, but the reservation serialises on one `TicketTier` row
 by design, so a real on-sale rush will hit this. Needs a caught-and-translated
 timeout at minimum.
 
+> **RESOLVED — and it was worse than this.** `critic-oversell.ts` wraps every
+> call in `.catch()`, which folds a crash into the same shape as a polite
+> refusal, so it could only ever see these as losses. `critic-rush.ts` separates
+> them and asks the one question that has no legitimate failure: with room for
+> everybody, does everybody get served? At 120 concurrent buyers and 240 seats,
+> **55 of 120 threw, and `sold` came back 72 against 65 orders — seven seats
+> taken with nothing behind them.** Not just an ugly error: leaked inventory,
+> and a p50 of 33 s. Release leaked too: 33 reserved, 24 released, 10 seats
+> never came back.
+>
+> The cause was not the 5 s timeout, which is a symptom. Reservation held the
+> contended `TicketTier` row across three network round trips — take seats,
+> close tier, insert order — while every other buyer queued behind it. It is now
+> one data-modifying CTE that does all three, so the row is held for one
+> server-side statement and there is no interactive transaction left to expire.
+> Release is one statement for the same reason. After: **120/120 and 300/300
+> served, 0 threw, no leak, p50 33 s → 3.3 s.** Losers still lose, in a sentence.
+> See `apps/events/scripts/critic-rush.ts` and §10a below.
+
 **5 · `verify:dod` asserts the opposite of the shipped integration.**
 §6. Four of its 57 checks encode "the other routers are stubs". Anyone reading
 57/57 as a health check after Phase 3 is reading it wrong.
@@ -533,6 +552,32 @@ a root typecheck on Windows.
 
 ---
 
+## 10a · Fixed after this report was written
+
+Kept separate from §10 on purpose: §10 is what the Critic found, and it should
+stay readable as the snapshot it was. This is what happened next.
+
+**Risk #2 — no application seen serving a page against real data. CLOSED.**
+The cause was TLS interception on this machine regenerating its root CA
+mid-run, not anything in the product. `scripts/trust-local-tls.mjs` pins that CA
+and `NODE_EXTRA_CA_CERTS` points at it — a CA already in the machine's root
+store, never `NODE_TLS_REJECT_UNAUTHORIZED=0`. All three apps now serve real
+Neon data, and 5 of the 7 golden-path tests pass. Tests 4 and 5 still fail
+inside Playwright's CJS transform when importing package internals from an ESM
+workspace: a harness limitation, not a product defect.
+
+**Risk #4 — reservation under a flash sale. FIXED.** Detailed inline above.
+Two scripts came out of it, both of which now guard the fix:
+
+- `apps/events/scripts/critic-rush.ts` — the concurrency question, with crashes
+  counted separately from refusals so a regression cannot hide in a total.
+- `e2e/scripts/browser-purchase.ts` — one purchase through a real browser, the
+  real form and the real server action against a running server. Everything else
+  that exercises reservation runs the module under tsx, which proves the SQL and
+  not the path a guest takes.
+
+---
+
 ## 11 · How to reproduce everything here
 
 ```bash
@@ -551,6 +596,7 @@ pnpm --filter @ovation/console exec dotenv -e ../../.env -- \
 pnpm --filter @ovation/console exec dotenv -e ../../.env -- \
   node --conditions=react-server --import tsx scripts/critic-integration.ts
 pnpm --filter @ovation/events  exec dotenv -e ../../.env -- tsx scripts/critic-oversell.ts
+pnpm --filter @ovation/events  exec dotenv -e ../../.env -- tsx scripts/critic-rush.ts 300
 pnpm --filter @ovation/live    exec dotenv -e ../../.env -- tsx scripts/critic-door.ts
 pnpm --filter @ovation/live    exec dotenv -e ../../.env -- tsx scripts/critic-perf.ts
 
@@ -562,8 +608,19 @@ npx tsx --env-file=.env scripts/critic/ws-probe.ts
 pnpm typecheck && pnpm build
 ```
 
+The browser purchase needs a server to drive:
+
+```bash
+pnpm --filter @ovation/events build && pnpm --filter @ovation/events start &
+pnpm --filter @ovation/e2e exec dotenv -e ../.env -- tsx scripts/browser-purchase.ts
+```
+
 The two console scripts **must** run under `--conditions=react-server`; the
 console's server modules import `server-only`.
 
-`prisma generate` needs `NODE_TLS_REJECT_UNAUTHORIZED=0` on a TLS-intercepting
-network, or it fails fetching the engine checksum from `binaries.prisma.sh`.
+`prisma generate` fails fetching the engine checksum from `binaries.prisma.sh`
+on a TLS-intercepting network. Run `node scripts/trust-local-tls.mjs` once — it
+pins the intercepting root CA from the machine's own root store and points
+`NODE_EXTRA_CA_CERTS` at it. Do **not** use `NODE_TLS_REJECT_UNAUTHORIZED=0`,
+which this report originally suggested: it disables certificate verification for
+every connection the process makes, including the ones to the database.
