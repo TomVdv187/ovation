@@ -585,16 +585,41 @@ async function main() {
   if (isModelConfigured()) {
     console.log("\n·  Live turn against claude-opus-5");
     try {
+      // Ask for something that is actually a change.
+      //
+      // This used to say "Make it black-tie" — which everything above has
+      // already done, so by the time the live turn runs the event is black-tie
+      // and the request is a no-op. The model read the current theme, said
+      // "nothing to change", and raised no card. It was right; the test was
+      // wrong, and it had never run against a real model to find out. A
+      // scripted model answers whatever the script says regardless of state,
+      // which is exactly the class of mistake a scripted model cannot catch.
+      const current = (await themeField(event.id, "dressCode")) ?? "";
+      const wanted = current === "Cocktail" ? "Lounge suit" : "Cocktail";
+
       const live = await runAgentTurn({
         ...base,
-        message: "Make it black-tie",
+        message: `Change the dress code to ${wanted}.`,
         model: anthropicModel(),
       });
       check("the live model replied", live.reply.length > 0);
       check(
-        "the live model proposed a theme change",
+        "the live model chose update_event_theme",
         live.proposals.some((p) => p.type === "update_event_theme"),
         live.proposals.map((p) => p.type).join(",") || "no proposals",
+      );
+      // The safety contract, exercised by a real model rather than a script:
+      // a cosmetic change with auto-approve off must come back PROPOSED, and
+      // the event must be untouched until a human approves it.
+      check(
+        "the live proposal is PROPOSED, not applied",
+        live.proposals.every((p) => p.status === "PROPOSED"),
+        live.proposals.map((p) => p.status).join(",") || "no proposals",
+      );
+      check(
+        "the live turn did not touch the event",
+        (await themeField(event.id, "dressCode")) === current,
+        `dressCode=${await themeField(event.id, "dressCode")}`,
       );
       console.log(`\n    reply: ${live.reply.slice(0, 400)}\n`);
       await db.agentAction.deleteMany({

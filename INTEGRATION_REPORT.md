@@ -467,6 +467,31 @@ unproven end to end. Everything in §4.3 proves the *machinery around* the model
 is safe when the model misbehaves; nothing proves the model behaves. This is
 the single largest gap and it is not closable without a key.
 
+> **CLOSED — the key was there all along.** The Vercel API returns an empty
+> string for every `type=sensitive` variable, so reading `ANTHROPIC_API_KEY`
+> back and seeing `""` proved nothing; `AUTH_SECRET` and `DIRECT_URL` read the
+> same way, and production signs users in and reaches Postgres. All four paths
+> now run against `claude-opus-5`: tool selection (`verify:dod`, 61/61),
+> ORACLE's personalisation (`pnpm --filter @ovation/guests eval`, every fixture
+> grounded, distinct and injection-resistant), TREASURY's offer drafting
+> (`offer:preview`, every claim traceable to the evidence list), and prompt
+> injection (`critic-injection.ts` §F6 — the real model refused the injected
+> instruction and told the organiser to clean the poisoned records).
+>
+> The first live turn found a real defect: the SDK was pinned at **0.32.1**, two
+> years older than the model it calls. On `claude-opus-5` thinking is on when
+> the parameter is omitted — the reverse of the previous generation — and
+> `display` defaults to `omitted`, which returns thinking blocks with an empty
+> `thinking` field. The tool loop echoes assistant blocks back on the next
+> round, and the API rejects a blank one: `messages.17.content.0.thinking: each
+> thinking block must contain thinking`. Fixed by upgrading to 0.116.0 and
+> stating the intent — `thinking: {type: "adaptive", display: "summarized"}` —
+> plus `max_tokens` 4096 → 16000, since that ceiling now covers thinking and the
+> reply together.
+>
+> §F6 is evidence, not a guarantee: one model, one day. The guarantee remains
+> the machinery in §4.3, which does not depend on the model behaving.
+
 **2 · No application has been seen serving a page against real data.**
 §7. Three Next apps, zero verified browser renders in this environment. A defect
 that only manifests in the Next runtime — a serialization boundary, a client

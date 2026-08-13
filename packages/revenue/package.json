@@ -15,7 +15,7 @@
     "clean": "rimraf .turbo *.tsbuildinfo"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.32.1",
+    "@anthropic-ai/sdk": "^0.116.0",
     "@ovation/core": "workspace:*",
     "@trpc/server": "^11.0.0",
     "zod": "^3.24.1"

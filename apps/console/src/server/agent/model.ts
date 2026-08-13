@@ -11,10 +11,46 @@ import type { AnthropicTool } from "./tools";
  */
 
 export const AGENT_MODEL = "claude-opus-5";
-const MAX_TOKENS = 4096;
+
+/**
+ * Thinking, stated rather than inherited.
+ *
+ * On this model thinking is ON when the parameter is omitted — the opposite of
+ * the previous generation, where omitting it meant no thinking. Leaving it out
+ * therefore does not mean "no thinking", it means "whatever the default is",
+ * and the default changed under us.
+ *
+ * `display` matters just as much. Left alone it is "omitted", which still
+ * returns thinking blocks but with an EMPTY thinking field — and the tool loop
+ * echoes every assistant block back on the next round, which is how the whole
+ * turn died with
+ *
+ *     messages.17.content.0.thinking: each thinking block must contain thinking
+ *
+ * A blank block the API will not accept back is worse than no block at all.
+ * "summarized" fills them in, so the round trip is legal and we get the
+ * reasoning in the bargain.
+ *
+ * Disabling thinking would also have silenced it, and is the wrong fix here:
+ * with thinking off this model occasionally writes a tool call into its visible
+ * text instead of emitting a tool_use block — the turn then succeeds, the call
+ * never runs, and nothing raises. An agent whose tools silently don't fire is a
+ * worse failure than a slow one.
+ */
+const THINKING = { type: "adaptive", display: "summarized" } as const;
+
+/**
+ * Room for thinking AND the reply: max_tokens caps their sum, so the 4096 that
+ * comfortably held a chat answer before thinking was on now truncates one.
+ */
+const MAX_TOKENS = 16_000;
 
 export type AgentContentBlock =
   | { type: "text"; text: string }
+  // Carried, never read. The loop echoes assistant content back verbatim on the
+  // next round and the API requires these blocks to return unchanged, so they
+  // have to survive the trip through our own types.
+  | { type: "thinking"; thinking: string; signature: string }
   | { type: "tool_use"; id: string; name: string; input: unknown };
 
 export interface AgentToolResult {
@@ -80,6 +116,7 @@ export function anthropicModel(): AgentModel {
         const stream = client.messages.stream({
           model: AGENT_MODEL,
           max_tokens: MAX_TOKENS,
+          thinking: THINKING,
           system,
           messages: messages as unknown as Anthropic.MessageParam[],
           tools: tools as unknown as Anthropic.Tool[],
