@@ -66,15 +66,36 @@ hosted database on you.
 
 ### Two databases: development and production
 
-They are separate Neon **branches** of the same project, which gives each its
-own storage, its own compute endpoint and — the part that matters — its own
-point-in-time-restore history. Restoring development to undo a mistake cannot
-roll production back with it.
+Two databases on one Neon endpoint, each owned by its own role. Postgres cannot
+query across databases, so the seeded demo and real data cannot mix.
 
-| | branch | contains | who points at it |
-| :-- | :-- | :-- | :-- |
-| development | `main` | the seeded demo — Meridian Summit 2026, 200 guests | local `.env`, Vercel preview + development |
-| production | `production` | real data only | Vercel production, all three apps |
+| | database | role | contains | who points at it |
+| :-- | :-- | :-- | :-- | :-- |
+| development | `neondb` | `neondb_owner` | the seeded demo — Meridian Summit 2026, 200 guests | local `.env`, Vercel preview + development |
+| production | `ovation_prod` | `ovation_prod_app` | real data only | Vercel production, all three apps |
+
+`prisma/provision-prod.ts` creates the role and database and writes
+`.env.production`. It is idempotent, and the generated password goes straight
+to the file — never to stdout, so it cannot end up in a scrollback or a log.
+
+**What this isolates, tested rather than assumed.** The production role is
+refused on `neondb` (`permission denied for table Guest`), so production
+credentials cannot reach the demo data. And the destructive commands cannot
+reach production by accident: `db:seed` and `db:reset` read `.env`, which names
+`neondb`.
+
+**What it does not isolate.** `neondb_owner` is a member of `neon_superuser` —
+the project superuser — so it can read every database in the project, including
+`ovation_prod`. Revoking grants does not change that; it is a property of the
+Neon project, not of these two databases. Compute and point-in-time restore are
+shared for the same reason: PITR is per-branch, so restoring development to
+undo a mistake would roll production back with it.
+
+**Two Neon branches would fix all three**, and that was the intended shape.
+Branches are control-plane only — there is no SQL for them — so they need the
+Neon console or a Neon API key. Moving is cheap while production is empty and
+expensive once real registrations land: create a `production` branch, point
+`.env.production` at it, re-run `db:push:prod` and `db:bootstrap:prod`.
 
 The seed and production are mutually exclusive by design. `db:seed` builds the
 fixture every test asserts against; that is precisely what production must not
@@ -87,6 +108,7 @@ Production credentials live in `.env.production` at the repo root, which is
 gitignored like `.env`. The `:prod` scripts are the only ones that read it:
 
 ```bash
+pnpm db:provision:prod                # create the role, database and .env.production
 pnpm db:push:prod                     # apply the schema to production
 pnpm db:bootstrap:prod --org "Ovation" --email you@example.com
 ```

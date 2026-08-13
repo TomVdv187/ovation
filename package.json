@@ -17,6 +17,7 @@
     "db:push:tcp": "pnpm --filter @ovation/core db:push:tcp",
     "db:seed": "pnpm --filter @ovation/core db:seed",
     "db:bootstrap": "pnpm --filter @ovation/core db:bootstrap",
+    "db:provision:prod": "pnpm --filter @ovation/core db:provision:prod",
     "db:push:prod": "pnpm --filter @ovation/core db:push:prod",
     "db:bootstrap:prod": "pnpm --filter @ovation/core db:bootstrap:prod",
     "db:studio": "pnpm --filter @ovation/core db:studio",

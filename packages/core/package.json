@@ -21,6 +21,7 @@
     "db:push:tcp": "dotenv -e ../../.env -- prisma db push",
     "db:seed": "dotenv -e ../../.env -- tsx prisma/seed.ts",
     "db:bootstrap": "dotenv -e ../../.env -- tsx prisma/bootstrap.ts",
+    "db:provision:prod": "dotenv -e ../../.env -- tsx prisma/provision-prod.ts",
     "db:push:prod": "dotenv -e ../../.env.production -- tsx prisma/push.ts",
     "db:bootstrap:prod": "dotenv -e ../../.env.production -- tsx prisma/bootstrap.ts",
     "db:studio": "dotenv -e ../../.env -- prisma studio",
