@@ -40,6 +40,19 @@ export type ApprovalSource =
 /** Risks that no organisation setting may ever wave through. */
 const NEVER_AUTO: readonly ActionRiskT[] = ["OUTBOUND", "DESTRUCTIVE"];
 
+/**
+ * The compare-and-swap below found the row already claimed.
+ *
+ * Distinct from every other failure because NOTHING WENT WRONG: another
+ * request is executing this action, or already has. The distinction is
+ * load-bearing — see the catch in executeOne.
+ */
+class AlreadyDecidedError extends Error {
+  constructor() {
+    super("Action was already decided.");
+  }
+}
+
 export async function executeApprovedActions(
   db: Db,
   actionIds: string[],
@@ -134,10 +147,10 @@ async function executeOne(
           executedAt: new Date(),
         },
       });
-      if (claimed.count === 0) throw new Error("Action was already decided.");
+      if (claimed.count === 0) throw new AlreadyDecidedError();
 
       const row = await tx.agentAction.findUnique({ where: { id: actionId } });
-      if (!row) throw new Error("Action was already decided.");
+      if (!row) throw new AlreadyDecidedError();
 
       const payload = parsePayload(applyPatch(row.payload, patch));
       await assertEventInOrg(tx, payload.input.eventId, row.organisationId);
@@ -158,6 +171,35 @@ async function executeOne(
 
     return { actionId, status: "EXECUTED", result, error: null };
   } catch (error) {
+    /**
+     * LOSING THE RACE IS NOT A FAILURE — and writing it down as one corrupts
+     * the winner.
+     *
+     * The compare-and-swap above is what stops two concurrent approvals both
+     * executing. The loser claims nothing and rolls back, which is correct.
+     * But this catch used to mark the row FAILED unconditionally, and the row
+     * it marked is the one the WINNER had just set to EXECUTED — so a
+     * double-clicked Approve drafted the campaign once (right) and then
+     * reported it as failed (wrong), leaving an EXECUTED mutation behind a
+     * FAILED status that no retry can clear, because FAILED is not a status
+     * executeOne will pick up again.
+     *
+     * So: claimed-and-then-broke writes FAILED, never-claimed reads the row
+     * back and reports what actually happened to it.
+     */
+    if (error instanceof AlreadyDecidedError) {
+      const settled = await db.agentAction.findUnique({
+        where: { id: actionId },
+        select: { status: true, result: true, error: true },
+      });
+      return {
+        actionId,
+        status: settled?.status ?? "FAILED",
+        result: (settled?.result as JsonValue | null) ?? null,
+        error: settled?.status === "EXECUTED" ? null : (settled?.error ?? null),
+      };
+    }
+
     const message =
       error instanceof Error ? error.message : "Execution failed.";
     // The transaction rolled back, so the world is untouched. Record why.

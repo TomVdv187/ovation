@@ -22,14 +22,53 @@ declare module "next-auth" {
 
 const hasResend = Boolean(process.env.RESEND_API_KEY);
 
+/** Only used when nothing sends — the link goes to the console instead. */
+const DEV_FROM = "OVATION <hello@ovation.local>";
+
+/**
+ * The sender address, or a refusal.
+ *
+ * In production, refuse — do not fall back. `ovation.local` is not a domain
+ * anybody owns, so Resend answers every send with
+ *
+ *   403 The ovation.local domain is not verified
+ *
+ * and the magic link is never delivered. That is not a degraded sign-in, it is
+ * no sign-in at all, and it looked like a working deploy from the outside: the
+ * page rendered, the form posted, and the failure lived in a server log. This
+ * is the same rule qr-token.ts applies to QR_SIGNING_SECRET, for the same
+ * reason — a development placeholder must not survive into production.
+ *
+ * Scoped to the path that actually sends: with no RESEND_API_KEY the link is
+ * printed to the console and `from` is never read, which is what keeps a fresh
+ * clone working with nothing but a DATABASE_URL.
+ */
+function sender(): string {
+  const configured = process.env.EMAIL_FROM;
+  if (configured && configured.length > 0) return configured;
+
+  if (hasResend && process.env.NODE_ENV === "production") {
+    throw new Error(
+      "EMAIL_FROM is required in production — refusing to send sign-in links " +
+        `from ${DEV_FROM}, which no verified domain backs.`,
+    );
+  }
+
+  return DEV_FROM;
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(db),
   session: { strategy: "database" },
-  pages: { signIn: "/signin", verifyRequest: "/signin?sent=1" },
+  // `error` matters as much as the other two: without it Auth.js sends failures
+  // to its built-in /api/auth/error, which this route handler answers with
+  // `UnknownAction: Cannot handle action: error` and a 500. A guest who cannot
+  // sign in should see the sign-in page saying why, not a server error.
+  pages: { signIn: "/signin", verifyRequest: "/signin?sent=1", error: "/signin" },
   providers: [
     Resend({
       apiKey: process.env.RESEND_API_KEY ?? "re_dev_placeholder",
-      from: process.env.EMAIL_FROM ?? "OVATION <hello@ovation.local>",
+      from: sender(),
       ...(hasResend
         ? {}
         : {

@@ -46,8 +46,8 @@ export default async function ConsoleLayout({
       ) : (
         <aside className="flex w-chat shrink-0 items-center border-l border-line bg-surface p-6">
           <p className="text-sm text-ink-muted">
-            The agent needs an event to work on. Seed one with{" "}
-            <code className="text-gold">pnpm db:seed</code>.
+            The agent needs an event to work on. This organisation has none
+            yet — create one and the panel comes to life.
           </p>
         </aside>
       )}

@@ -13,15 +13,10 @@ import { auth } from "./auth";
 export async function requireConsoleEvent() {
   const session = await auth();
   if (!session?.user?.id) redirect("/signin");
-  if (!session.user.organisationId) {
-    return {
-      session,
-      event: null,
-      organisationId: null,
-      organisationName: null,
-      autoApproveCosmetic: false,
-    } as const;
-  }
+  // No organisation means every procedure below answers FORBIDDEN, so the
+  // console would render a shell with nothing in it. /welcome is the way out
+  // and it is the only page that works in this state.
+  if (!session.user.organisationId) redirect("/welcome");
 
   const event =
     (await db.event.findFirst({

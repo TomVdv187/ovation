@@ -7,6 +7,7 @@ import { revenueRouter } from "@ovation/revenue";
 import { auth } from "./auth";
 import { agentRouter } from "./routers/agent";
 import { eventRouter } from "./routers/event";
+import { organisationRouter } from "./routers/organisation";
 
 /**
  * The console composes the app router. Phase 3: every contract stub is gone.
@@ -20,6 +21,10 @@ export const appRouter = createAppRouter({
   // Owned by Agent 1 · CONDUCTOR.
   event: eventRouter,
   agent: agentRouter,
+  // Not part of the six-router contract: the one mutation that has to run
+  // before an organisation exists, so a fresh deployment can set itself up
+  // without database credentials. `AppRouterParts` allows extra keys.
+  organisation: organisationRouter,
   // Owned by Agents 2–5, mounted by Agent 7 · CRITIC in Phase 3.
   page: pageRouter,
   guests: guestsRouter,

@@ -1,17 +1,35 @@
 import { redirect } from "next/navigation";
+import { AuthError } from "next-auth";
 import { auth, signIn } from "~/server/auth";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Auth.js error codes are for us, not for the person locked out. Anything not
+ * named here is a configuration fault on our side, and saying so is more use
+ * than echoing `Configuration` at somebody trying to sign in.
+ */
+function explain(code: string): string {
+  switch (code) {
+    case "EmailSignInError":
+    case "Verification":
+      return "We could not send that link. Check the address and try again.";
+    case "AccessDenied":
+      return "That address is not allowed to sign in.";
+    default:
+      return "Sign-in is not working right now. The team has been sent the details.";
+  }
+}
+
 export default async function SignIn({
   searchParams,
 }: {
-  searchParams: Promise<{ sent?: string }>;
+  searchParams: Promise<{ sent?: string; error?: string }>;
 }) {
   const session = await auth();
   if (session?.user) redirect("/");
 
-  const { sent } = await searchParams;
+  const { sent, error } = await searchParams;
   const devMode = !process.env.RESEND_API_KEY;
 
   return (
@@ -27,14 +45,32 @@ export default async function SignIn({
           </p>
         ) : null}
 
+        {error ? (
+          <p className="mt-6 rounded border border-critical/40 bg-critical/10 p-4 text-sm">
+            {explain(error)}
+          </p>
+        ) : null}
+
         <form
           className="mt-6 space-y-3"
           action={async (formData: FormData) => {
             "use server";
-            await signIn("resend", {
-              email: String(formData.get("email") ?? ""),
-              redirectTo: "/",
-            });
+            // signIn throws on failure. Uncaught, that renders Next's error
+            // boundary — a blank 500 where the form was. Caught, the person
+            // gets the form back with a sentence. AuthError only: the redirect
+            // signIn throws on SUCCESS is not one, and must keep propagating.
+            try {
+              await signIn("resend", {
+                email: String(formData.get("email") ?? ""),
+                redirectTo: "/",
+              });
+            } catch (cause) {
+              if (cause instanceof AuthError) {
+                console.error("[signin] could not send the link:", cause.type, cause.message);
+                redirect(`/signin?error=${encodeURIComponent(cause.type)}`);
+              }
+              throw cause;
+            }
           }}
         >
           <label className="block text-xs uppercase tracking-widest text-ink-subtle">

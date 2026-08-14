@@ -70,7 +70,24 @@ export async function performCheckin(
   db: Db,
   raw: CheckinInput,
 ): Promise<CheckinOutput> {
-  const key = `${raw.eventId}:${raw.idempotencyKey}`;
+  /**
+   * The subject belongs in the key, for the same reason it is in the WHERE of
+   * the replay lookup below.
+   *
+   * An idempotency key identifies a SCAN, not a person, and it is generated
+   * client-side, so two devices can collide on one. Keyed on the key alone,
+   * the second caller awaited the FIRST caller's promise and was handed the
+   * first guest's answer — their name, their arrival time, CHECKED_IN — while
+   * the second guest was never written at all. A device with a weak key
+   * generator could wave a stranger through and leave the real guest off the
+   * list. That is check E5 in scripts/critic-door.ts, fixed at the database
+   * layer and still open here, one function earlier.
+   *
+   * The token identifies the guest (it is signed with `gid`), so including it
+   * separates two people while still coalescing a genuine retry of one scan.
+   */
+  const subject = raw.token ?? raw.guestId ?? "";
+  const key = `${raw.eventId}:${raw.idempotencyKey}:${subject}`;
   const existing = inflight.get(key);
   if (existing) return existing;
 
