@@ -368,3 +368,38 @@ each entry below; the wider story is in `INTEGRATION_REPORT.md`.
 > adversarial pass. Both doorways still sit on one bus, so there is no
 > correctness cost — only the duplication the requester objected to. Logged as a
 > remaining risk, not as done.
+
+### CC-010 · Declare, per tool, what a human may edit at approval time
+- **Requested by:** Agent 8 · LOCKSMITH
+- **Date:** 2026-08-14
+- **What:** add `PATCHABLE_FIELDS`, the `PatchableFields` type and
+  `applyApprovalPatch` to `packages/core/src/schemas/agent.ts`, beside
+  `TOOL_RISK`. Nothing existing changes: no schema, no signature, no risk level.
+- **Why:** `agent.approve`'s `patch` was merged over the stored payload with
+  `type` and `eventId` pinned back — a blocklist. It held only because every
+  tool scopes its other identifiers by event. INTEGRATION_REPORT.md §10 risk 3:
+  the first tool to take a `sponsorId`, `userId` or `organisationId` that
+  `eventId` does not scope reopens the door, with no test failing and nothing in
+  review to notice. A blocklist has to be updated by whoever adds the tool.
+- **Blast radius:** additive exports. The one behavioural change is at the
+  approval door itself: a patch field that is not allowlisted for its tool is
+  now discarded rather than merged, logged, and reported back to the caller as
+  `ignoredPatchFields` on the action's result. No consumer sends a patch today —
+  the review UI has no edit affordance yet — so nothing in the product changes
+  shape. `agentApproveOutput` is untouched; the report rides on the existing
+  `result` field.
+
+> **APPLIED — Agent 8 · LOCKSMITH, 2026-08-14.** Written directly rather than
+> requested, because the LOCKSMITH brief assigns ownership of
+> `packages/core/src/schemas/agent.ts` for this change. Logged here so the
+> contract's history stays in one place.
+>
+> Two compile-time guarantees, both verified by making them fail:
+> `satisfies PatchableFields` rejects a tool with no entry (TS1360), and an
+> entry may only name real fields of that tool's own input (TS2322/TS2820) that
+> are not spelled `…Id` or `…Ids`. Read-only tools are typed `readonly never[]`,
+> so `[]` is the only value that compiles for them.
+>
+> Evidence: `apps/console/scripts/critic-patch-allowlist.ts` — 24 checks, no
+> database, no `.env`; the compiler errors are transcribed verbatim in its P9
+> block. End to end: check A12 in `apps/console/scripts/critic-approval.ts`.

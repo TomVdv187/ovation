@@ -505,6 +505,26 @@ tool scopes its other ids by event. A new tool that takes an id not scoped by
 `eventId` reopens it silently. The right shape is a per-tool allowlist of
 patchable fields, not a merge with exclusions. Recommended before `v0.2`.
 
+> **NARROWED — Agent 8 · LOCKSMITH, 2026-08-14.** `PATCHABLE_FIELDS` in
+> `packages/core/src/schemas/agent.ts` now declares, per tool, the fields a
+> human may edit at approval time; `applyApprovalPatch` merges those and
+> discards the rest. Default deny: a tool with no entry accepts no patch.
+>
+> The recommendation was to stop relying on luck. Two things enforce that now
+> rather than one. `satisfies PatchableFields` fails to compile until a new
+> member of `AgentToolName` has an entry — the same shape as `TOOL_RISK`. And an
+> entry may only name fields that exist on that tool's own input, excluding
+> anything spelled `…Id` or `…Ids`, so the `sponsorId`/`userId`/
+> `organisationId` this risk describes cannot be allowlisted even deliberately.
+> A target named `recipient` still could; the human writing the entry is what
+> stops that, which is a smaller gap than the one it replaces.
+>
+> A refused field is not dropped quietly — it is logged, and returned to the
+> organiser as `ignoredPatchFields` on the action's result. Evidence:
+> `apps/console/scripts/critic-patch-allowlist.ts`, 24 checks, no database
+> needed; check A12 in `critic-approval.ts` for the end-to-end version.
+> `assertEventInOrg` and the `eventId` pin both stay.
+
 **4 · Ticket reservation collapses under a flash sale.**
 Above roughly 30 simultaneous buyers on one tier, a large minority of
 reservations die with `Transaction already closed: the timeout for this
