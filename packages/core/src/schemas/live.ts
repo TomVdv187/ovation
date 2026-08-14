@@ -213,5 +213,7 @@ export const cueSchema = z.object({
   /** Proposes an AgentAction unless explicitly whitelisted as auto. */
   auto: z.boolean().default(false),
   enabled: z.boolean().default(true),
+  /** When it fired tonight; null means armed. Persisted, not in-process. */
+  firedAt: z.coerce.date().nullable().default(null),
 });
 export type Cue = z.infer<typeof cueSchema>;

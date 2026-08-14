@@ -46,7 +46,7 @@ export async function POST(req: Request) {
     data: { rsvpStatus: "CONFIRMED" },
   });
 
-  resetFired(eventId);
+  await resetFired(db, eventId);
   resetRoom(eventId);
   metrics.reset();
 

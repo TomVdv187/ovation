@@ -35,25 +35,21 @@ import { emit } from "../realtime";
  *
  * CC-008 accepted: cue definitions are rows in the `Cue` table now. The first
  * read of an event seeds the default set, and after that an organiser who
- * disables the capacity cue at 19:00 keeps it disabled across a deploy. The
- * fired-once-per-night marker stays in memory on purpose — it is state about
- * tonight, not configuration, and the persisted "is there already an open
- * proposal for this cue" check below is what actually survives a restart.
+ * disables the capacity cue at 19:00 keeps it disabled across a deploy.
+ *
+ * METRONOME: the fired-once-per-night marker is `Cue.firedAt`, a column. It
+ * used to be a Map in this module, which meant the once-per-night guarantee
+ * was enforced by process memory while every other guarantee here is enforced
+ * by the database. A redeploy, a crash, or a serverless instance recycling —
+ * routine on Vercel — emptied it and re-armed every cue that had already gone
+ * off. The open-proposal check below hid most of that, because a duplicate card
+ * was still refused; what it could not hide is a cue whose proposal had already
+ * been approved or rejected, which has no open proposal and fired again.
  */
 
 const CUE_ACTION_MARKER = "ovationCue";
 
 export const DOORS_KIND = "DOORS";
-
-interface CueState {
-  /** `${eventId}:${cueId}` -> when it last fired, so it fires once per night. */
-  fired: Map<string, number>;
-}
-
-const globalForCues = globalThis as unknown as { ovationLiveCues?: CueState };
-const state: CueState = (globalForCues.ovationLiveCues ??= {
-  fired: new Map(),
-});
 
 export function defaultCues(eventId: string): Cue[] {
   return [
@@ -64,6 +60,7 @@ export function defaultCues(eventId: string): Cue[] {
       trigger: { type: "CAPACITY_PERCENT", percent: 70 },
       auto: false,
       enabled: true,
+      firedAt: null,
     },
     {
       id: "vip-late-30",
@@ -72,6 +69,7 @@ export function defaultCues(eventId: string): Cue[] {
       trigger: { type: "VIP_LATE", minutesAfterDoors: 30 },
       auto: false,
       enabled: true,
+      firedAt: null,
     },
     {
       id: "arrival-rate-drop-60",
@@ -80,6 +78,7 @@ export function defaultCues(eventId: string): Cue[] {
       trigger: { type: "ARRIVAL_RATE_DROP", percent: 60 },
       auto: false,
       enabled: true,
+      firedAt: null,
     },
   ];
 }
@@ -141,6 +140,7 @@ function toCue(row: {
   trigger: unknown;
   auto: boolean;
   enabled: boolean;
+  firedAt: Date | null;
 }): Cue {
   return cueSchema.parse({
     id: row.id,
@@ -149,13 +149,41 @@ function toCue(row: {
     trigger: row.trigger,
     auto: row.auto,
     enabled: row.enabled,
+    firedAt: row.firedAt,
   });
 }
 
-export function resetFired(eventId: string): void {
-  for (const key of [...state.fired.keys()]) {
-    if (key.startsWith(`${eventId}:`)) state.fired.delete(key);
-  }
+/** Re-arms every cue on an event. Used by the dev reset and `?reset=1`. */
+export async function resetFired(db: Db, eventId: string): Promise<void> {
+  await db.cue.updateMany({
+    where: { eventId, firedAt: { not: null } },
+    data: { firedAt: null },
+  });
+}
+
+/**
+ * Claim a cue for tonight. Returns true for exactly one caller.
+ *
+ * The guarded UPDATE is the whole mechanism: `firedAt: null` in the WHERE means
+ * two instances evaluating the same cue at the same moment both attempt it, one
+ * matches a row and one matches none, and the count settles it. Same shape as
+ * `reserve()` in apps/events/src/server/ticketing.ts, and for the same reason —
+ * a read-then-write here would let both through.
+ *
+ * Claimed BEFORE proposing, not after, so the loser never reaches the proposal
+ * at all. If proposing then fails, `release` puts it back.
+ */
+async function claim(db: Db, cueId: string): Promise<boolean> {
+  const claimed = await db.cue.updateMany({
+    where: { id: cueId, firedAt: null },
+    data: { firedAt: new Date() },
+  });
+  return claimed.count > 0;
+}
+
+/** Undo a claim whose proposal did not land, so the cue can fire later tonight. */
+async function release(db: Db, cueId: string): Promise<void> {
+  await db.cue.updateMany({ where: { id: cueId }, data: { firedAt: null } });
 }
 
 // ── evaluation ────────────────────────────────────────────────
@@ -202,10 +230,19 @@ async function evaluate(
   if (cues.length === 0) return;
 
   for (const cue of cues) {
-    if (state.fired.has(`${eventId}:${cue.id}`)) continue;
+    // Already fired tonight, according to the database rather than this process.
+    if (cue.firedAt !== null) continue;
     try {
       const proposal = await assess(db, eventId, cue, ctx);
-      if (proposal) await propose(db, eventId, cue, proposal);
+      if (!proposal) continue;
+      // Claim first: only one instance may go on to propose.
+      if (!(await claim(db, cue.id))) continue;
+      try {
+        await propose(db, eventId, cue, proposal);
+      } catch (err) {
+        await release(db, cue.id);
+        throw err;
+      }
     } catch (err) {
       console.error(
         `[live] cue ${cue.id} failed:`,
@@ -488,10 +525,9 @@ async function propose(
     },
     select: { id: true },
   });
-  if (open) {
-    state.fired.set(`${eventId}:${cue.id}`, Date.now());
-    return;
-  }
+  // An open proposal for this cue already exists — the claim stands, so it
+  // will not be raised again tonight.
+  if (open) return;
 
   const action = await db.agentAction.create({
     data: {
@@ -513,7 +549,6 @@ async function propose(
   });
 
   assertProposalOnly(action.status);
-  state.fired.set(`${eventId}:${cue.id}`, Date.now());
 
   emit(eventId, {
     kind: "CUE",

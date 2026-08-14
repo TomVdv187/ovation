@@ -571,6 +571,9 @@ model Cue {
   trigger Json
   auto    Boolean @default(false)
   enabled Boolean @default(true)
+  /// When this cue fired tonight. NULL = armed. Persisted rather than held in
+  /// memory so the once-per-night guarantee survives a restart — see METRONOME.
+  firedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -38,7 +38,7 @@ export async function POST(req: Request) {
   const eventId = url.searchParams.get("eventId");
   if (!eventId) return Response.json({ error: "eventId is required" }, { status: 400 });
 
-  if (url.searchParams.get("reset") === "1") resetFired(eventId);
+  if (url.searchParams.get("reset") === "1") await resetFired(db, eventId);
 
   const body = await req.json().catch(() => null);
   const cues =
