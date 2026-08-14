@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { expect, test, type BrowserContext } from "@playwright/test";
 import { db } from "@ovation/core/db";
+import { checkinBatch, revenueSummary, startCheckout } from "../helpers/bridge";
 
 /**
  * The golden path, end to end, across the console and the public events app.
@@ -224,22 +225,21 @@ test("3 · a guest registers and appears scored in guest intelligence", async ({
 });
 
 test("4 · a ticket purchase moves revenue.summary", async ({ page }) => {
-  const { revenueRouter } = await import("@ovation/revenue");
-  const { createCallerFactory, router } = await import("@ovation/core");
-  const caller = createCallerFactory(router({ revenue: revenueRouter }))({
-    db,
-    session: {
-      user: {
-        id: fixture.userId,
-        email: `${TAG}@example.invalid`,
-        name: null,
-        organisationId: fixture.organisationId,
-        role: "OWNER" as const,
-      },
+  // revenue.summary and startCheckout are run through the tsx bridge, not
+  // imported here: @ovation/revenue pulls in @anthropic-ai/sdk and
+  // @ovation/events/ticketing settles orders — both ESM-only chains Playwright's
+  // CJS transform cannot load. The bridge does the module work; every assertion
+  // below stays in this spec, unchanged in strength. See helpers/bridge.ts.
+  const session = {
+    user: {
+      id: fixture.userId,
+      email: `${TAG}@example.invalid`,
+      name: null,
+      organisationId: fixture.organisationId,
+      role: "OWNER" as const,
     },
-    headers: null,
-  });
-  const before = await caller.revenue.summary({ eventId: fixture.eventId });
+  };
+  const before = await revenueSummary(fixture.eventId, session);
 
   // A priced tier, so the purchase is worth something.
   const paid = await db.ticketTier.create({
@@ -258,7 +258,6 @@ test("4 · a ticket purchase moves revenue.summary", async ({ page }) => {
   await page.goto(`${EVENTS}/e/${fixture.slug}/tickets`);
   await expect(page.getByText("Priced")).toBeVisible();
 
-  const { startCheckout } = await import("@ovation/events/ticketing");
   const outcome = await startCheckout({
     slug: fixture.slug,
     tierId: paid.id,
@@ -277,18 +276,17 @@ test("4 · a ticket purchase moves revenue.summary", async ({ page }) => {
     timeout: 20_000,
   });
 
-  const after = await caller.revenue.summary({ eventId: fixture.eventId });
+  const after = await revenueSummary(fixture.eventId, session);
   expect(after.tickets.totalCents - before.tickets.totalCents).toBe(15_000);
   expect(after.tickets.sold).toBeGreaterThan(before.tickets.sold);
 });
 
 test("5 · check-ins move the ops snapshot", async () => {
-  const { signQrToken } = await import("../../apps/live/src/server/live/qr");
-  const { performCheckin } = await import("../../apps/live/src/server/live/checkin");
-  const { opsSnapshot } = await import("../../apps/live/src/server/live/ops");
-
-  const before = await opsSnapshot(db, fixture.eventId);
-
+  // qr.ts imports jose (ESM-only), so signing, check-in and the ops snapshot
+  // all run through the tsx bridge. The token is signed by the real
+  // signQrToken with the real qrSecret — nothing is stubbed, which is the point
+  // of this test. Guest selection stays here; the bridge returns raw before /
+  // after snapshots and per-guest outcomes, and this spec asserts on them.
   const guests = await db.guest.findMany({
     where: { eventId: fixture.eventId, checkIn: null },
     take: 5,
@@ -296,19 +294,13 @@ test("5 · check-ins move the ops snapshot", async () => {
   });
   expect(guests.length).toBeGreaterThan(0);
 
-  for (const g of guests) {
-    const token = await signQrToken({ gid: g.id, eid: fixture.eventId });
-    const res = await performCheckin(db, {
-      eventId: fixture.eventId,
-      token,
-      lane: "main",
-      idempotencyKey: `${TAG}-${g.id}`,
-      offlineSynced: false,
-    });
-    expect(res.outcome).toBe("CHECKED_IN");
-  }
+  const { before, after, outcomes } = await checkinBatch({
+    eventId: fixture.eventId,
+    gids: guests.map((g) => g.id),
+    tag: TAG,
+  });
 
-  const after = await opsSnapshot(db, fixture.eventId);
+  expect(outcomes).toEqual(guests.map(() => "CHECKED_IN"));
   expect(after.checkedIn).toBe(before.checkedIn + guests.length);
   expect(after.capacityPercent).toBeGreaterThan(before.capacityPercent);
 });
