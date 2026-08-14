@@ -50,6 +50,21 @@ cd ovation
 
 Everything from here runs inside that `ovation` folder.
 
+### Check you are in the right folder — before every step from here on
+
+Your prompt must end in `ovation`:
+
+```
+PS C:\ovation>          <-- right
+PS C:\>                 <-- wrong, you are at the drive root
+```
+
+If it says `PS C:\>`, run `cd C:\ovation` first. **A new terminal always starts
+at `C:\`**, so you have to do this every time you open one. Nothing below works
+from the drive root, and the errors it produces do not say so — you get
+`Cannot find module` from node, and `EPERM: operation not permitted` from pnpm,
+because Windows will not let anything write to `C:\`.
+
 ## 3. Install the dependencies
 
 ```bash
@@ -135,6 +150,11 @@ node scripts/pull-db-credentials.mjs
 
 If it says the old credential still works, nothing rotated and the problem is
 something else.
+
+**`Cannot find module` or `EPERM: operation not permitted`.** You are not in the
+project folder. Check the prompt — it must read `PS C:\ovation>`, not `PS C:\>`.
+Run `cd C:\ovation` and try again. This is the single most common failure, and
+neither error message mentions the real cause.
 
 **`vercel link` says it cannot find the project.** You are signed in to the
 wrong Vercel account. Run `vercel logout`, then `vercel login` again with the
