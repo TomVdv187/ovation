@@ -25,6 +25,22 @@ let warned = false;
 function secret(): string {
   const configured = process.env.QR_SIGNING_SECRET;
   if (configured && configured.length > 0) return configured;
+
+  // In production, refuse — do not fall back.
+  //
+  // DEV_SECRET is a constant in a public repository. Signing a real ticket
+  // with it means anyone who can read GitHub can mint one that scans clean at
+  // the door, and the warning that used to stand in for this went to a server
+  // log nobody reads. apps/live already throws here; issuing tickets is the
+  // side that matters more, because a door that will not start is a visible
+  // problem and a forged ticket is not.
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "QR_SIGNING_SECRET is required in production — refusing to sign check-in " +
+        "tokens with the public development secret.",
+    );
+  }
+
   if (!warned) {
     warned = true;
     console.warn(

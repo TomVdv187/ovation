@@ -36,6 +36,35 @@ Other useful commands:
 
 **Requirements:** Node ≥ 20.11, pnpm 10, a PostgreSQL database.
 
+### Continuing on another machine
+
+`git clone` gives you the code and none of the secrets — `.env` and
+`.env.production` are gitignored, and without them nothing runs. Vercel holds
+most of what belongs in them, so:
+
+```bash
+git clone https://github.com/TomVdv187/ovation.git && cd ovation
+pnpm install
+npm i -g vercel
+vercel link --yes --scope <your-team> --project ovation
+node scripts/bootstrap-from-vercel.mjs      # writes .env and .env.production
+pnpm db:generate
+pnpm dev
+```
+
+`bootstrap-from-vercel.mjs` pulls both environments and writes the two files.
+It never overwrites an existing `.env` — on a machine that already works,
+silently replacing the file you are using is a bad trade for saving a command —
+and it ends by listing the keys Vercel does not carry rather than inventing
+plausible values, because a wrong secret that looks right is worse than a
+missing one that stops you.
+
+Two things it cannot do for you. If the machine intercepts TLS (a corporate
+proxy, some antivirus), run `node scripts/trust-local-tls.mjs` — see below. And
+the third-party keys that are still blank — Resend, Stripe, the realtime
+provider — have to come from those dashboards; everything works without them
+except the features they belong to.
+
 ### One `.env`, at the repo root
 
 There is a single `.env` at the repo root and it is the source of truth.
