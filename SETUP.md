@@ -7,10 +7,21 @@ lists the three things that actually go wrong.
 
 ---
 
+**Where to run all of this:** a normal terminal — PowerShell on Windows,
+Terminal on a Mac. Not Emdash. Emdash runs coding agents inside a project that
+already exists, so it cannot do the setup; open it on the folder afterwards, once
+step 7 works.
+
+Step 4 opens your browser to sign in, so it has to be a terminal you are sitting
+at, not an automated one.
+
+---
+
 ## 1. Install the tools
 
-You need Node 22 and pnpm.
+You need git, Node 22 and pnpm.
 
+- git: <https://git-scm.com/downloads> — run the installer, accept the defaults.
 - Node: download the **LTS** installer from <https://nodejs.org> and run it.
 - pnpm: open a terminal and run
 
@@ -18,12 +29,17 @@ You need Node 22 and pnpm.
 npm install -g pnpm
 ```
 
-Check both:
+Then **close the terminal and open a new one** — installers only take effect in
+terminals opened afterwards. Check all three:
 
 ```bash
+git --version      # expect 2.x
 node --version     # expect v22 or higher
 pnpm --version     # expect 10 or higher
 ```
+
+If any of those says "not recognised", that tool did not install — redo it
+before going on.
 
 ## 2. Get the code
 
@@ -96,6 +112,10 @@ You should also be able to open:
 ---
 
 ## If something goes wrong
+
+**Do not run these as part of the setup.** Steps 1–7 are the setup. Each command
+below is a cure for one specific symptom; run one only if you actually see that
+symptom.
 
 **`pnpm dev` shows database or certificate errors.** Some antivirus and most
 corporate networks inspect encrypted traffic, which breaks the database
