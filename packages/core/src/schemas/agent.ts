@@ -58,6 +58,10 @@ export const TOOL_RISK: Record<AgentToolName, z.infer<typeof actionRiskSchema>> 
     get_budget_summary: "COSMETIC",
   };
 
+// The companion table — what a human may edit at approval time, per tool — is
+// PATCHABLE_FIELDS. It sits below the tool inputs because it is typed against
+// them. Adding a tool without an entry there does not compile, like TOOL_RISK.
+
 /**
  * The single gate. `autoApproveCosmetic` is an organisation setting; nothing
  * outbound or destructive is ever exempt.
@@ -151,6 +155,144 @@ export const agentActionPayloadSchema = z.discriminatedUnion("type", [
   }),
 ]);
 export type AgentActionPayload = z.infer<typeof agentActionPayloadSchema>;
+
+// ── what a human may edit at approval time ────────────────────
+
+/**
+ * THE APPROVAL DOOR.
+ *
+ * A human reviewing a proposal may edit it before clicking Approve, and those
+ * edits arrive as `agent.approve`'s `patch`. This table is the whole of what a
+ * patch is allowed to reach.
+ *
+ * It is an ALLOWLIST, and it replaced a merge-with-exclusions that pinned
+ * `type` and `eventId` and let everything else through. That was safe only
+ * because every tool happens to scope its other identifiers by event: the first
+ * tool to take a `sponsorId`, `userId` or `organisationId` that is NOT scoped
+ * by `eventId` would have reopened the door silently, with no test failing.
+ * INTEGRATION_REPORT.md §10 risk 3.
+ *
+ * Two rules, and the type below enforces both as far as a type can:
+ *
+ * 1. CONTENT, NEVER TARGETS. Copy a human might reasonably rewrite — a subject,
+ *    a body, a price, a date being corrected. Never an identifier that selects
+ *    who or what is acted upon. An identifier cannot even be NAMED here: any
+ *    field ending `Id` or `Ids` is excluded from the field type, so
+ *    `draft_sponsor_offer: ["sponsorId"]` does not compile, and neither would
+ *    the `userId` or `organisationId` of a tool nobody has written yet.
+ * 2. DEFAULT DENY. A field not named for its tool is discarded, not merged, and
+ *    the discard is reported rather than swallowed. A tool with no fields
+ *    accepts no patch at all — which is what the read-only tools get, typed as
+ *    `readonly never[]` so `[]` is the only value that compiles.
+ *
+ * ADDING A TOOL FORCES THE DECISION: `satisfies PatchableFields` fails to
+ * compile until the new member of `AgentToolName` has an entry here, and each
+ * entry may only name fields that exist on that tool's own input schema.
+ *
+ * The `Id`/`Ids` rule is a naming convention doing load-bearing work, which is
+ * worth saying out loud: it catches the identifier that is spelled like one.
+ * A target field named `recipient` or `audience` would still compile, and the
+ * human writing the entry is what stops it. That is a smaller gap than the one
+ * this replaces — it needs somebody to add BOTH an unconventionally-named
+ * target AND an entry naming it, rather than merely to add a tool.
+ */
+type PatchableFieldName<T> = Exclude<
+  keyof T & string,
+  /**
+   * `eventId` is pinned from the stored payload; the rest is the convention.
+   * A patchable field may not be an identifier, and an identifier is spelled
+   * like one everywhere in this contract.
+   */
+  `${string}Id` | `${string}Ids`
+>;
+
+type MutatingToolFields = {
+  [P in AgentActionPayload as P["type"]]: PatchableFieldName<P["input"]>;
+};
+
+export type PatchableFields = {
+  [K in AgentToolName]: readonly (K extends keyof MutatingToolFields
+    ? MutatingToolFields[K]
+    : never)[];
+};
+
+export const PATCHABLE_FIELDS = {
+  update_event_theme: ["theme"],
+  update_agenda: ["agenda"],
+  // A date being corrected is the canonical legitimate edit.
+  change_event_date: ["date", "endsAt", "reason"],
+  // The words, and the steer behind them. NOT `guestIds` — that is who.
+  draft_emails: ["draft", "brief"],
+  // Everything here describes a tier being created, not one being selected.
+  create_ticket_tier: ["name", "priceCents", "quota", "opensAt"],
+  // The offer. NOT `sponsorId` — that is who, and it is risk 3's own example.
+  draft_sponsor_offer: ["draft", "targetPackage", "incrementalAmountCents"],
+  // Read-only tools never become an AgentAction, so nothing can patch them.
+  get_no_show_risks: [],
+  get_budget_summary: [],
+} as const satisfies PatchableFields;
+
+/** What `applyApprovalPatch` did, so the caller can log and surface it. */
+export interface PatchOutcome {
+  /** The payload to execute: stored, with allowlisted fields overwritten. */
+  payload: unknown;
+  /** Fields the human sent that were NOT applied. Sorted, may be empty. */
+  ignored: string[];
+}
+
+/**
+ * Merge an organiser's patch over a stored payload, allowlist first.
+ *
+ * Pure, and deliberately outside the executor: this is contract behaviour, and
+ * a change to it is a change to what approval means.
+ *
+ * Anything unrecognised — a patch that is not an object, a payload whose type
+ * is not a known tool — applies nothing and says so. It never throws; the
+ * result is re-parsed against `agentActionPayloadSchema` downstream, which is
+ * what rejects a well-named field with a malformed value.
+ */
+export function applyApprovalPatch(
+  payload: unknown,
+  patch: unknown,
+): PatchOutcome {
+  if (patch === undefined || patch === null) return { payload, ignored: [] };
+  if (typeof patch !== "object" || Array.isArray(patch)) {
+    return { payload, ignored: ["<patch was not an object>"] };
+  }
+
+  const base = (payload ?? {}) as Record<string, unknown>;
+  const baseInput = (base.input as Record<string, unknown>) ?? {};
+  const p = patch as Record<string, unknown>;
+  // The console sends `{ input: { … } }`; a bare field map is accepted too.
+  const patchInput =
+    p.input && typeof p.input === "object" && !Array.isArray(p.input)
+      ? (p.input as Record<string, unknown>)
+      : p;
+
+  const tool = agentToolNameSchema.safeParse(base.type);
+  const allowed: readonly string[] = tool.success
+    ? PATCHABLE_FIELDS[tool.data]
+    : [];
+
+  const applied: Record<string, unknown> = {};
+  const ignored: string[] = [];
+  for (const field of Object.keys(patchInput)) {
+    if (allowed.includes(field)) applied[field] = patchInput[field];
+    else ignored.push(field);
+  }
+  // A patch of `{ type: … }` is aimed at the tool, not its input. Same verdict,
+  // but say so by name rather than letting it vanish into the input map.
+  if (patchInput !== p && "type" in p) ignored.push("type");
+
+  return {
+    payload: {
+      ...base,
+      type: base.type,
+      input: { ...baseInput, ...applied, eventId: baseInput.eventId },
+    },
+    ignored: ignored.sort(),
+  };
+}
 
 // ── the action itself ─────────────────────────────────────────
 

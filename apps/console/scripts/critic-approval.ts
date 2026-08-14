@@ -407,6 +407,87 @@ async function main() {
     else bad("A10 personaliseInvite sends nothing", `${before} -> ${after}`);
   }
 
+  console.log("\nA12 · a patched action executes against what was PROPOSED");
+  {
+    /**
+     * Agent 8 · LOCKSMITH. A3 asks whether a patch can reach org B and answers
+     * by counting rows over there. That is the question that matters, but it
+     * cannot tell a refused patch apart from a crash — before the allowlist,
+     * A3 passed because the pinned `eventId` left `guestIds` pointing at guests
+     * of another event, and the mutation threw.
+     *
+     * This is the other half: with the identifiers refused and the copy
+     * applied, the action must go through, against the guests the MODEL chose,
+     * carrying the words the HUMAN wrote. The unit-level proof, with no
+     * database in the way, is apps/console/scripts/critic-patch-allowlist.ts.
+     *
+     * It runs before A11 rather than after it so that A11's sweep — nothing,
+     * anywhere in the rig, ever reaches SENT — covers the rows drafted here.
+     */
+    const proposedGuest = rig.guestsA[6]!;
+    const action = await proposeRaw(rig, "draft_emails", {
+      eventId: rig.eventA,
+      guestIds: [proposedGuest],
+      intent: "INVITE",
+      draft: { subject: "Proposed", body: "Proposed body" },
+    });
+    const beforeB = await db.emailMessage.count({ where: { eventId: rig.eventB } });
+
+    const res = await A.agent.approve({
+      actionIds: [action.id],
+      patch: {
+        input: {
+          // Refused: identifiers, not content.
+          eventId: rig.eventB,
+          guestIds: [rig.guestB, rig.guestsA[7]!],
+          // Applied: the words on the card.
+          draft: { subject: "Edited by a human", body: "Edited body" },
+        },
+      },
+    });
+
+    if (res.results[0]?.status === "EXECUTED") {
+      ok("A12 a partly-refused patch still executes");
+    } else {
+      bad(
+        "A12 a partly-refused patch still executes",
+        `${res.results[0]?.status} ${res.results[0]?.error ?? ""}`,
+      );
+    }
+
+    const rows = await db.emailMessage.findMany({
+      where: { eventId: rig.eventA, subject: "Edited by a human" },
+      select: { guestId: true, body: true },
+    });
+    if (rows.length === 1 && rows[0]?.guestId === proposedGuest) {
+      ok("A12 drafted for the proposed guest only", `${rows.length} row`);
+    } else {
+      bad(
+        "A12 drafted for the proposed guest only",
+        `${rows.length} rows: ${rows.map((r) => r.guestId).join(", ")}`,
+      );
+    }
+    if (rows[0]?.body.includes("Edited body")) {
+      ok("A12 the human's words were used");
+    } else {
+      bad("A12 the human's words were used", rows[0]?.body.slice(0, 80) ?? "no row");
+    }
+
+    const afterB = await db.emailMessage.count({ where: { eventId: rig.eventB } });
+    if (afterB === beforeB) ok("A12 nothing reached org B");
+    else bad("A12 nothing reached org B", `${beforeB} -> ${afterB}`);
+
+    // The refusal is not silent: it is on the result the organiser gets back,
+    // and on the stored action row, as well as in the server log.
+    const ignored = (res.results[0]?.result as { ignoredPatchFields?: string[] } | null)
+      ?.ignoredPatchFields;
+    if (ignored?.includes("eventId") && ignored?.includes("guestIds")) {
+      ok("A12 the discarded fields are reported back", ignored.join(", "));
+    } else {
+      bad("A12 the discarded fields are reported back", JSON.stringify(ignored));
+    }
+  }
+
   console.log("\nA11 · does anything reach status SENT anywhere in the rig?");
   {
     const sent = await db.emailMessage.count({

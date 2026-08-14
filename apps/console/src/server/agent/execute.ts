@@ -1,5 +1,6 @@
 import "server-only";
 import {
+  applyApprovalPatch,
   eventThemeSchema,
   requiresApproval,
   type AgentActionPayload,
@@ -139,10 +140,23 @@ async function executeOne(
       const row = await tx.agentAction.findUnique({ where: { id: actionId } });
       if (!row) throw new Error("Action was already decided.");
 
-      const payload = parsePayload(applyPatch(row.payload, patch));
+      const patched = applyApprovalPatch(row.payload, patch);
+      if (patched.ignored.length > 0) {
+        // Never silent. A human who edited a field the allowlist does not
+        // accept must not be left believing their edit landed — hence this
+        // line, and `ignoredPatchFields` on the result below, which is stored
+        // on the action row and handed back by `agent.approve`.
+        console.warn(
+          `[agent] approve ${actionId} (${row.type}): patch fields ignored — ${patched.ignored.join(", ")}`,
+        );
+      }
+      const payload = parsePayload(patched.payload);
       await assertEventInOrg(tx, payload.input.eventId, row.organisationId);
 
-      const mutationResult = await performMutation(tx, payload);
+      const mutationResult = withIgnoredFields(
+        await performMutation(tx, payload),
+        patched.ignored,
+      );
 
       await tx.agentAction.update({
         where: { id: actionId },
@@ -172,8 +186,9 @@ async function executeOne(
 /**
  * Organiser tweaks to the payload before executing (agent.approve `patch`).
  *
- * SECURITY — Agent 7 · CRITIC, Phase 3. `eventId` and `type` are pinned from
- * the STORED payload and cannot be patched.
+ * SECURITY — Agent 7 · CRITIC, Phase 3, narrowed by Agent 8 · LOCKSMITH. The
+ * merge is `applyApprovalPatch` in packages/core, driven by `PATCHABLE_FIELDS`:
+ * a per-tool allowlist, default deny. Read the contract there for why.
  *
  * Found by testing, not by reading: `agent.approve` checks that the ACTION
  * belongs to the caller's organisation (`assertActionsBelongToOrg`) but nothing
@@ -184,27 +199,26 @@ async function executeOne(
  * reproduction is check A2 in apps/console/scripts/critic-approval.ts, which
  * rewrote org B's theme from an org A session.
  *
- * Pinning here closes it for every tool at once: `draft_emails` already scopes
- * its guests by `eventId`, and `draft_sponsor_offer` already scopes its sponsor
- * by `eventId`, so an unpatched `eventId` makes every other id in the payload
- * unreachable outside the event. `assertEventInOrg` below is the second lock.
+ * Pinning `eventId` closed that for every tool that scopes its other ids by
+ * event — which is every tool today, and was the whole of the guarantee. The
+ * allowlist is what makes it true for tools that do not exist yet.
+ * `assertEventInOrg` below stays as the second, independent lock.
+ *
+ * Fields the allowlist refused are not dropped quietly: they are logged, and
+ * reported back on the action's result by the helper below.
  */
-function applyPatch(payload: unknown, patch: unknown): unknown {
-  if (patch === undefined || patch === null) return payload;
-  if (typeof patch !== "object" || Array.isArray(patch)) return payload;
-  const base = (payload ?? {}) as Record<string, unknown>;
-  const baseInput = (base.input as Record<string, unknown>) ?? {};
-  const p = patch as Record<string, unknown>;
-  const patchInput = (p.input as Record<string, unknown>) ?? p;
-  return {
-    ...base,
-    type: base.type,
-    input: {
-      ...baseInput,
-      ...patchInput,
-      eventId: baseInput.eventId,
-    },
-  };
+
+/**
+ * Carry the refusals out on the result, so they survive the request: the
+ * result is stored on the AgentAction row and returned by `agent.approve`.
+ * Absent entirely when nothing was refused, which is every ordinary approval.
+ */
+function withIgnoredFields(result: JsonValue, ignored: string[]): JsonValue {
+  if (ignored.length === 0) return result;
+  if (typeof result !== "object" || result === null || Array.isArray(result)) {
+    return { result, ignoredPatchFields: ignored };
+  }
+  return { ...result, ignoredPatchFields: ignored };
 }
 
 /**
