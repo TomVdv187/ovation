@@ -1,8 +1,11 @@
 import "server-only";
 import {
+  applyToolPatch,
   eventThemeSchema,
   requiresApproval,
+  TOOL_PATCHABLE_FIELDS,
   type AgentActionPayload,
+  type AgentToolName,
   type ActionRiskT,
   type AgentActionStatusT,
   type JsonValue,
@@ -226,27 +229,56 @@ async function executeOne(
  * reproduction is check A2 in apps/console/scripts/critic-approval.ts, which
  * rewrote org B's theme from an org A session.
  *
- * Pinning here closes it for every tool at once: `draft_emails` already scopes
- * its guests by `eventId`, and `draft_sponsor_offer` already scopes its sponsor
- * by `eventId`, so an unpatched `eventId` makes every other id in the payload
- * unreachable outside the event. `assertEventInOrg` below is the second lock.
+ * Pinning `eventId` closed it for every tool at once — but only because every
+ * tool happened to scope its other ids by event. That was a blocklist, and it
+ * would have reopened silently the first time somebody added a tool taking an
+ * id the event does not scope.
+ *
+ * It is now an allowlist: TOOL_PATCHABLE_FIELDS in packages/core names, per
+ * tool, the fields a human may edit, and everything else is discarded. Adding a
+ * tool without an entry does not compile. `assertEventInOrg` below remains the
+ * second, independent lock.
  */
 function applyPatch(payload: unknown, patch: unknown): unknown {
   if (patch === undefined || patch === null) return payload;
   if (typeof patch !== "object" || Array.isArray(patch)) return payload;
+
   const base = (payload ?? {}) as Record<string, unknown>;
   const baseInput = (base.input as Record<string, unknown>) ?? {};
-  const p = patch as Record<string, unknown>;
-  const patchInput = (p.input as Record<string, unknown>) ?? p;
-  return {
-    ...base,
-    type: base.type,
-    input: {
-      ...baseInput,
-      ...patchInput,
-      eventId: baseInput.eventId,
-    },
-  };
+
+  // The stored type decides which allowlist applies, so a patch cannot choose
+  // its own rules by claiming to be a different tool.
+  const tool = base.type as AgentToolName;
+  if (!(tool in TOOL_PATCHABLE_FIELDS)) return payload;
+
+  const { input, discarded } = applyToolPatch(tool, baseInput, patch);
+
+  if (discarded.length > 0) {
+    /**
+     * REFUSE, do not quietly drop.
+     *
+     * Ignoring the field and executing anyway is the tempting reading — the
+     * proposal was legitimate, only the patch was bad. It is the wrong one.
+     * Approval is a statement about specific content: someone who patched
+     * `guestIds` believed they were changing who receives this. Executing with
+     * the field discarded sends to the ORIGINAL, wider list under a click that
+     * meant something else. Silently doing not-quite-what-was-approved is the
+     * exact failure the approval gate exists to prevent.
+     *
+     * So the whole approval fails, the transaction rolls back, and the row
+     * records why. Safe to be this strict: the console never sends a patch,
+     * so nothing in the product hits this path — only the API, and an API
+     * caller passing a non-patchable field is either confused or probing.
+     */
+    throw new Error(
+      `Approval patch for ${tool} names field(s) that cannot be edited at ` +
+        `approval: ${discarded.join(", ")}. ` +
+        `Editable: ${TOOL_PATCHABLE_FIELDS[tool].join(", ") || "(none)"}. ` +
+        `Nothing was executed.`,
+    );
+  }
+
+  return { ...base, type: base.type, input };
 }
 
 /**

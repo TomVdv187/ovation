@@ -26,7 +26,9 @@
     "db:bootstrap:prod": "dotenv -e ../../.env.production -- tsx prisma/bootstrap.ts",
     "db:studio": "dotenv -e ../../.env -- prisma studio",
     "db:reset": "dotenv -e ../../.env -- tsx prisma/push.ts --force && pnpm db:seed",
-    "clean": "rimraf .turbo node_modules/.prisma *.tsbuildinfo"
+    "clean": "rimraf .turbo node_modules/.prisma *.tsbuildinfo",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -45,6 +47,7 @@
     "rimraf": "^6.0.1",
     "tailwindcss": "^3.4.17",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
   }
 }
