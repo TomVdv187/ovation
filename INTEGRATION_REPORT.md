@@ -587,9 +587,16 @@ The cause was TLS interception on this machine regenerating its root CA
 mid-run, not anything in the product. `scripts/trust-local-tls.mjs` pins that CA
 and `NODE_EXTRA_CA_CERTS` points at it — a CA already in the machine's root
 store, never `NODE_TLS_REJECT_UNAUTHORIZED=0`. All three apps now serve real
-Neon data, and 5 of the 7 golden-path tests pass. Tests 4 and 5 still fail
-inside Playwright's CJS transform when importing package internals from an ESM
-workspace: a harness limitation, not a product defect.
+Neon data, and all 7 golden-path tests pass.
+
+Tests 4 and 5 used to fail inside Playwright's CJS transform when importing
+package internals from an ESM workspace. That was a harness limitation and not
+a product defect, which was true and was also how the two paths that touch
+money and the door stayed untested. Closed by agent 11 · HARNESS: those imports
+now run in a child process under tsx (`e2e/scripts/bridge.ts`), the runtime the
+critic scripts have always used. No assertion was weakened — test 4 still
+requires an exact 15,000-cent delta, and test 5 still signs its QR token with
+the real `signQrToken`.
 
 **Risk #4 — reservation under a flash sale. FIXED.** Detailed inline above.
 Two scripts came out of it, both of which now guard the fix:

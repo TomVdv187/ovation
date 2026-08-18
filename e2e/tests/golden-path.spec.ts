@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { expect, test, type BrowserContext } from "@playwright/test";
 import { db } from "@ovation/core/db";
+import { openBridge, type Bridge } from "../helpers/bridge";
+import { CONSOLE, EVENTS } from "../helpers/urls";
 
 /**
  * The golden path, end to end, across the console and the public events app.
@@ -29,10 +31,12 @@ import { db } from "@ovation/core/db";
  *
  * Everything destructive happens on a throwaway event this suite creates and
  * deletes. Meridian Summit 2026 is read but never written.
+ *
+ * Tests 4 and 5 reach into `apps/events` and `apps/live`, which Playwright
+ * cannot load — see helpers/bridge.ts for why, and for what runs them instead.
+ * The functions they call are the real ones; only the process differs.
  */
 
-const CONSOLE = process.env.CONSOLE_URL ?? "http://localhost:3000";
-const EVENTS = process.env.EVENTS_URL ?? "http://localhost:3001";
 const TAG = "e2e-golden";
 
 interface Fixture {
@@ -45,6 +49,13 @@ interface Fixture {
 }
 
 let fixture: Fixture;
+
+/** Opened on first use by test 4, closed in afterAll. */
+let bridgeHandle: Bridge | null = null;
+async function bridge(): Promise<Bridge> {
+  bridgeHandle ??= await openBridge();
+  return bridgeHandle;
+}
 
 async function cleanup() {
   const orgs = await db.organisation.findMany({
@@ -123,6 +134,7 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
+  await bridgeHandle?.close();
   await cleanup();
 });
 
@@ -258,8 +270,10 @@ test("4 · a ticket purchase moves revenue.summary", async ({ page }) => {
   await page.goto(`${EVENTS}/e/${fixture.slug}/tickets`);
   await expect(page.getByText("Priced")).toBeVisible();
 
-  const { startCheckout } = await import("@ovation/events/ticketing");
-  const outcome = await startCheckout({
+  // The real `startCheckout` — run in the bridge child, because Playwright
+  // cannot load a module out of apps/events. Same function, same arguments,
+  // same 15,000 cents at the end of it.
+  const outcome = await (await bridge()).call("startCheckout", {
     slug: fixture.slug,
     tierId: paid.id,
     quantity: 2,
@@ -283,11 +297,16 @@ test("4 · a ticket purchase moves revenue.summary", async ({ page }) => {
 });
 
 test("5 · check-ins move the ops snapshot", async () => {
-  const { signQrToken } = await import("../../apps/live/src/server/live/qr");
-  const { performCheckin } = await import("../../apps/live/src/server/live/checkin");
-  const { opsSnapshot } = await import("../../apps/live/src/server/live/ops");
+  // All three of these live in apps/live and are run by the bridge child. The
+  // token is signed by the real `signQrToken` with the real QR_SIGNING_SECRET
+  // and verified by the real `performCheckin`: a check-in test that stubbed the
+  // signature would be testing nothing that matters.
+  const b = await bridge();
+  const { checkinOutput, opsSnapshotOutput } = await import("@ovation/core");
+  const snapshot = async () =>
+    opsSnapshotOutput.parse(await b.call("opsSnapshot", { eventId: fixture.eventId }));
 
-  const before = await opsSnapshot(db, fixture.eventId);
+  const before = await snapshot();
 
   const guests = await db.guest.findMany({
     where: { eventId: fixture.eventId, checkIn: null },
@@ -297,18 +316,20 @@ test("5 · check-ins move the ops snapshot", async () => {
   expect(guests.length).toBeGreaterThan(0);
 
   for (const g of guests) {
-    const token = await signQrToken({ gid: g.id, eid: fixture.eventId });
-    const res = await performCheckin(db, {
-      eventId: fixture.eventId,
-      token,
-      lane: "main",
-      idempotencyKey: `${TAG}-${g.id}`,
-      offlineSynced: false,
-    });
+    const token = await b.call("signQrToken", { gid: g.id, eid: fixture.eventId });
+    const res = checkinOutput.parse(
+      await b.call("performCheckin", {
+        eventId: fixture.eventId,
+        token,
+        lane: "main",
+        idempotencyKey: `${TAG}-${g.id}`,
+        offlineSynced: false,
+      }),
+    );
     expect(res.outcome).toBe("CHECKED_IN");
   }
 
-  const after = await opsSnapshot(db, fixture.eventId);
+  const after = await snapshot();
   expect(after.checkedIn).toBe(before.checkedIn + guests.length);
   expect(after.capacityPercent).toBeGreaterThan(before.capacityPercent);
 });

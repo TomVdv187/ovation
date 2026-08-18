@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { CONSOLE, CONSOLE_PORT, EVENTS, EVENTS_PORT } from "./helpers/urls";
 
 /**
  * Owned by Agent 7 · CRITIC. The golden path spans three apps, so the config
@@ -18,8 +19,10 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? "github" : "list",
+  /** Refuses to run against an app that is not ours. See the file. */
+  globalSetup: "./global-setup.ts",
   use: {
-    baseURL: process.env.CONSOLE_URL ?? "http://localhost:3000",
+    baseURL: CONSOLE,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
   },
@@ -42,14 +45,18 @@ export default defineConfig({
     ? undefined
     : [
         {
-          command: "pnpm --filter @ovation/console build && pnpm --filter @ovation/console start",
-          url: "http://localhost:3000",
+          command:
+            "pnpm --filter @ovation/console build && " +
+            `pnpm --filter @ovation/console exec next start --port ${CONSOLE_PORT}`,
+          url: CONSOLE,
           reuseExistingServer: !process.env.CI,
           timeout: 300_000,
         },
         {
-          command: "pnpm --filter @ovation/events build && pnpm --filter @ovation/events start",
-          url: "http://localhost:3001",
+          command:
+            "pnpm --filter @ovation/events build && " +
+            `pnpm --filter @ovation/events exec next start --port ${EVENTS_PORT}`,
+          url: EVENTS,
           reuseExistingServer: !process.env.CI,
           timeout: 300_000,
         },
